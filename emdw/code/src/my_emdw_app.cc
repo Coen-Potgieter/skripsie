@@ -9,238 +9,334 @@
 #include "prlite_testing.hpp"
 
 // emdw headers
-#include "emdw.hpp"
 #include "discretetable.hpp"
+#include "emdw.hpp"
 
 // standard headers
-#include <iostream>  // cout, endl, flush, cin, cerr
-#include <cctype>  // toupper
-#include <string>  // string
-#include <memory>
-#include <set>
-#include <map>
 #include <algorithm>
+#include <cctype>    // toupper
+#include <iostream>  // cout, endl, flush, cin, cerr
 #include <limits>
-#include <random>
+#include <map>
+#include <memory>
+#include <string>  // string
+#include <unordered_map>
+#include <vector>
 
 using namespace std;
 using namespace emdw;
 
-//##################################################################
-// Some example code. To compile this, go to the emdw/build
-// directory and do a:
-// cmake ../; make -j7 example
-// To run this while in the build directory, do a:
-// src/pmr/example
-//
-// For your own stuff, make a copy of this one to start with. Then
-// edit the CMakeLists.txt (also in this directory) by adding your
-// new target in the same way as this example.
-//##################################################################
+bool DEBUG = true;
+
+std::vector<std::vector<float>> readCSV(std::string_view filePath,
+                                        bool hasHeader = true);
+template <typename T>
+void print2DArray(std::vector<std::vector<T>> inp);
+void debugPrint(bool debug, std::string message);
+std::vector<emdw::RVIdType> createNodeIds(int numNodes, uint &runningIdCount);
+rcptr<std::vector<int>> createDiscreteRvDomain(size_t C);
+
+bool validateRvIds(
+    const std::vector<emdw::RVIdType> &droughtStateIds,
+    const std::vector<std::vector<emdw::RVIdType>> &attributeIds);
 
 int main(int, char *argv[]) {
+    // NOTE: this activates logging and unit tests
+    initLogging(argv[0]);
+    prlite::TestCase::runAllTests();
 
-  // NOTE: this activates logging and unit tests
-  initLogging(argv[0]);
-  prlite::TestCase::runAllTests();
+    try {
+        //*********************************************************
+        // This is some emdw things, just leave as is...
+        //*********************************************************
+        unsigned seedVal = emdw::randomEngine.getSeedVal();
+        cout << seedVal << endl;
+        emdw::randomEngine.setSeedVal(seedVal);
+        std::cout << "emdw things are done...\n\n\n\n\n";
 
-  try {
+        //*********************************************************
+        // Specify Parameters
+        // *********************************************************
+        int m = 4;
 
-    //*********************************************************
-    // Some random generator seeding. Just keep this as is
-    //*********************************************************
+        //*********************************************************
+        // Load In Data
+        // *********************************************************
 
-    unsigned seedVal = emdw::randomEngine.getSeedVal();
-    cout <<  seedVal << endl;
-    emdw::randomEngine.setSeedVal(seedVal);
+        // Specify CSV Path
+        std::string csv_path = "../../../data/synthetic/test.csv";
 
-    //*********************************************************
-    // Predefine some types and constants
-    //*********************************************************
+        // Load Data
+        debugPrint(DEBUG,
+                   "Loading Drought Indices From '" + csv_path + "' ...");
+        std::vector<std::vector<float>> observedAttributes;
+        try {
+            observedAttributes = readCSV(csv_path);
+        } catch (std::exception &e) {
+            std::cerr << "ERROR: " << e.what() << '\n';
+            return 1;
+        }
 
-    typedef int T;                  // The type of the values that the RVs can take on
-    typedef DiscreteTable<T> DT;    // DT now is a short-hand for DiscreteTable<int>
-    double defProb = 0.0;           // Any unspecified probs will default to this.
-    rcptr< vector<T> > binDom (     // Lists the values that a particular RV can take on
-        new vector<T>{0,1});
+        // Print Attributes
+        if (DEBUG) print2DArray(observedAttributes);
 
-    //*********************************************************
-    // Define the RVs
-    //*********************************************************
+        // ============ Populate Useful Variables Here, Now  ============
+        size_t T = observedAttributes.size();
+        size_t N = observedAttributes.at(0).size();
+        debugPrint(DEBUG, "# Time Steps → T = " + std::to_string(T));
+        debugPrint(DEBUG, "# Attribute RVs → N = " + std::to_string(N));
 
-    // The enum statement here predefines two RV ids: the id of X is 0
-    // and the id of Y is 1. This is easy enough in very simple
-    // problems, for more complex situations involving many RVs this
-    // becomes cumbersome and we will need a datastructure such as a
-    // map to save the RV ids in. Consult the userguide for more on
-    // this.
+        debugPrint(DEBUG, "✓ Success!\n");
 
-    enum{X, Y};
+        //*********************************************************
+        // Generate RV IDs
+        // *********************************************************
 
-    //*********************************************************
-    // Set up a discrete factor (in several ways) over two binary
-    // RVs specifying that they must have odd parity (i.e. their
-    // values will always differ).
-    //***************************************************
+        debugPrint(DEBUG, "Creating RV IDs...");
 
+        // Starting ID
+        uint rvIdentity = 0;
 
-    //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    // The most direct declaration. We show this as an example of
-    // construction with a basic set of parameters. See the class
-    // specific constructor from line 109 in
-    // src/emdw-factors/discretetable.hpp for more detail on the
-    // exact types of each variable.
-    //
-    // IMPORTANT: However, you will instead use a dynamic
-    // declaration (lower down), because that will allow you to
-    // access via its abstract category namely a Factor.
-    //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        // We will have T S_t RVs
+        std::vector<emdw::RVIdType> droughtStateRvIDs =
+            createNodeIds(T, rvIdentity);
 
-    DT objXY(
-      {X,Y},           // The ids of the two variables (ascending
-                       // order). If not presorted, the order of the
-                       // variables will get re-arranged in the class.
-      {binDom,binDom}, // The domains over which they can vary
-      defProb,         // The default probability for unspecified allocations
-      {                // The explicitly specified probabilities:
-        {{0,1}, 0.5},  // Note: the {0,1} is the allocation to {X,Y},
-        {{1,0}, 0.5},  // and the 0.5 is its probabilty.
-      } );
+        // Will access A_t^n IDs as a 2D matrix
+        std::vector<std::vector<emdw::RVIdType>> attributeRvIds;
+        for (size_t n = 0; n < N; n++) {
+            std::vector<emdw::RVIdType> singleAttributeRvIds =
+                createNodeIds(T, rvIdentity);
+            attributeRvIds.push_back(singleAttributeRvIds);
+        }
 
-    std::cout << __FILE__ << __LINE__ << ": " << objXY << std::endl; // displays the factor
+        // Check that all values are unique and of type `emdw::RVIdType`
 
-    //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    // Same thing, but now via a dynamic object creation. First
-    // thing to see is that for dynamic object creation, which
-    // allows us to refer to the abstract type of an object
-    // (i.e. Factor instead of DiscreteTable), we have to work via
-    // pointers. A pointer is a data type that contains an address of
-    // where in memory the actual object resides. It "points" to the
-    // actual object but, like a finger pointing to an elephant, it is
-    // not the object itself.
-    //
-    // Then note the hierarchy of pointers at play here. The "new"
-    // operator creates a raw c-pointer. But for several reasons we
-    // don't want to work with that, but instead use smart pointers
-    // (which also implicitly gives us garbage collection). So we first
-    // grab the raw pointer via a (temporary) uniqptr - it still points
-    // to a concrete DiscreteTable. This then gets transferred to a
-    // rcptr pointing to the abstract class (i.e. Factor).
-    //
-    // This all might feel somewhat daunting. ADVICE: Just copy the
-    // shape of it, you'll soon get used to it.
-    //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        if (!validateRvIds(droughtStateRvIDs, attributeRvIds)) {
+            std::cerr << "ERROR: Generation Of RV IDs Failed...\n";
+            return 1;
+        }
 
-    rcptr<Factor> ptrXY = // final abstract smart pointer (defined in emdw/src/emdw-base/emdw.hpp)
-      uniqptr<DT>(        // temporary DT smart pointer (defined in emdw/src/emdw-base/emdw.hpp)
-        new DT(           // raw c-pointer pointing to the newly created DT
-          {X,Y},
-          {binDom,binDom},
-          defProb,
-          {
-            {{0,1}, 0.5},
-            {{1,0}, 0.5},
-          } ));
+        debugPrint(DEBUG, "✓ Success!\n");
 
-    // Note the '*' before ptrXY. That is called derefencing, i.e. use
-    // the object the pointer is pointing to, not the pointer itself.
-    // Btw, the __FILE__ << __LINE__ business points the filename and
-    // line number in it. Useful to know of, also for debugging.
-    std::cout << __FILE__ << __LINE__ << ": " << *ptrXY << std::endl; // displays the factor
+        //*********************************************************
+        // Define Factors
+        // *********************************************************
 
-    //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-    // Same thing, but now making the structure for the specified
-    // (sparse) probabilities explicit. In more complex
-    // applications that can not simply be explicitly stated as above,
-    // we usually go via this way.
-    //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        debugPrint(DEBUG, "Defining Factors Of The Model...");
 
-    // The map contains the explicitly specified sparse
-    // probabilities. A c++ map is more or less the same thing as a
-    // python dictionary. FProb is defined in
-    // src/emdw-factors/discretetable.hpp.
-    // Mostly you can think of it (and use it) as a double.
-    map<vector<T>, FProb> sparseProbs;
-    sparseProbs[{0,1}] = 0.5; // the curly braces sticks the assignment into a std::vector<T>
-    sparseProbs[vector<T>({1,0})] = 0.5; // another way to do this
+        // ==================== Domain ====================
+        //  - We need a `rcptr` of a vector of ints
+        //  - This vector of ints will represent all the possible values the RV
+        //  can take on.
+        //  - This is quite simple but still out sourcing to a sperate function
+        //  - Note that this is only for Discrete Factors... (I think)
 
-    ptrXY = // re-using the smart pointer, the previous object will get garbage collected.
-      uniqptr<DT>(new DT({X,Y}, {binDom,binDom}, defProb, sparseProbs ));
+        // Hidden Drought State is simply `[1, 2, ..., m]`
+        rcptr<std::vector<int>> droughtDomain = createDiscreteRvDomain(m);
 
-    std::cout << __FILE__ << __LINE__ << ": " << *ptrXY << std::endl; // displays the factor
+        // Here we have a vector of `rcptr<std::vector<int>>`s of course indexed
+        // by each attribute (Note: This is only for discrete A_t^n)
+        std::vector<rcptr<std::vector<int>>> attributeRvDomains;
 
-    //*********************************************************
-    // Let's try some Factor operations.
-    // There is more on FactorOperator in
-    // emdw/src/emdw-factors/factoroperator.hpp
-    //***************************************************
+        // TODO: COME BACK HERE AND WORK ON THIS!!!!
+        for (size_t n = 0; n < N; n++) {
+            float maxVal =
+                std::max_element() rcptr<std::vector<int>> droughtDomain =
+                    createDiscreteRvDomain(m);
+        }
 
-    //+++++++++++++++++++++++++++++++++
-    // Marginalize to find p(Y)
-    //+++++++++++++++++++++++++++++++++
+        debugPrint(DEBUG, "✓ Success!\n");
 
-    // The marginalize operator below specifies a parameter {Y} as the
-    // variable(s) we want to RETAIN. If we wanted to retain both X
-    // and Y (somewhat nonsensical in this case), it would have been
-    // {X,Y}. The other thing to notice is the "->" operator. It
-    // basically takes the pointer to its left - ptrXY in this case,
-    // derefences it, and then applies the function/operator to its
-    // right to this object -- marginalize in this case.
+        return 0;  // tell the world that all is fine
+    }  // try
 
-    rcptr<Factor> ptrY  = ptrXY->marginalize({Y}); // Note, ptrY points to Factor, not DT
-    std::cout << __FILE__ << __LINE__ << ": " << *ptrY << std::endl; // displays the factor
+    catch (char msg[]) {
+        cerr << msg << endl;
+    }  // catch
 
+    // catch (char const* msg) {
+    //   cerr << msg << endl;
+    // } // catch
 
-    //++++++++++++++++++++++++++++++++++++
-    // Division: P(X|Y) = P(X,Y)/p(Y)
-    //++++++++++++++++++++++++++++++++++++
+    catch (const string &msg) {
+        cerr << msg << endl;
+        throw;
+    }  // catch
 
-    rcptr<Factor> ptrXgY = ptrXY->cancel(ptrY);
-    std::cout << __FILE__ << __LINE__ << ": " << *ptrXgY << std::endl; // displays the factor
+    catch (const exception &e) {
+        cerr << "Unhandled exception: " << e.what() << endl;
+        throw e;
+    }  // catch
 
-    //+++++++++++++++++++++++++++++++++++++++
-    // Multiplication P(X,Y) = P(X|Y)P(Y)
-    //+++++++++++++++++++++++++++++++++++++++
+    catch (...) {
+        cerr << "An unknown exception / error occurred\n";
+        throw;
+    }  // catch
 
-    std::cout << __FILE__ << __LINE__ << ": " << *ptrXgY->absorb(ptrY) << std::endl;
+}  // main
 
+void debugPrint(bool debug, std::string message) {
+    if (debug) std::cout << message << '\n';
+}
 
-    //++++++++++++++++++++++++++++++++++++++++++
-    // You can chain several operations
-    //++++++++++++++++++++++++++++++++++++++++++
+std::vector<std::string> splitByCharacter(const std::string &inputString,
+                                          const char &delimiter) {
+    std::vector<std::string> outp;
 
-    std::cout << __FILE__ << __LINE__ << ": " << *ptrXY->cancel(ptrY)->absorb(ptrY)->normalize() << std::endl;
+    size_t start = 0;
+    size_t end = 0;
 
-    //+++++++++++++++++++++++++++++++++++++
-    // Observing a variable: P(Y|X=0)
-    //+++++++++++++++++++++++++++++++++++++
+    while ((end = inputString.find(delimiter, start)) != std::string::npos) {
+        outp.push_back(inputString.substr(start, end - start));
+        start = end + 1;
+    }
 
-    std::cout << __FILE__ << __LINE__ << ": " << *ptrXY->observeAndReduce({X},{0})->normalize() << std::endl;
+    outp.push_back(inputString.substr(start));
+    return outp;
+}
 
-    return 0; // tell the world that all is fine
-  } // try
+/**
+ * @brief
+ *  - Lil Bit of ASCII Art here :)
+ * @param
+ *  -
+ * @return
+ *  -
+ */
+template <typename T>
+void print2DArray(std::vector<std::vector<T>> inp) {
+    std::pair<int, int> dims = std::make_pair(inp.size(), inp[0].size());
+    std::cout << "Printing 2D Array...\n";
 
-  catch (char msg[]) {
-    cerr << msg << endl;
-  } // catch
+    std::cout << "   ";
+    for (size_t i = 0; i < dims.second; i++) {
+        std::cout << i << "  ";
+    }
 
-  // catch (char const* msg) {
-  //   cerr << msg << endl;
-  // } // catch
+    std::cout << '\n';
+    for (size_t i = 0; i < dims.first; i++) {
+        std::cout << i << " |";
+        for (size_t j = 0; j < dims.second; j++) {
+            std::cout << inp.at(i).at(j);
 
-  catch (const string& msg) {
-    cerr << msg << endl;
-    throw;
-  } // catch
+            if (j != dims.second - 1) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << "|\n";
+    }
+}
 
-  catch (const exception& e) {
-    cerr << "Unhandled exception: " << e.what() << endl;
-    throw e;
-  } // catch
+/**
+ * @brief
+ *  - Reads in Drought Inidice Attributes.
+ *  - Must be in Form (A^1, A^2, A^3, ....)
+ * @param
+ *  -
+ * @return
+ *  - 2D Array (Number Attributes, Value At Each Time Step) → (N, T)
+ */
+std::vector<std::vector<float>> readCSV(std::string_view filePath,
+                                        bool hasHeader) {
+    std::ifstream fin;
+    std::string line;
+    std::vector<std::vector<float>> outp;
 
-  catch(...) {
-    cerr << "An unknown exception / error occurred\n";
-    throw;
-  } // catch
+    fin.open(filePath);
+    if (!fin) {
+        throw std::runtime_error("Given `filePath = " + std::string(filePath) +
+                                 "` could not be opened...");
+    }
 
-} // main
+    // Skip a Line If There Is a Header
+    if (hasHeader) std::getline(fin, line);
+
+    while (std::getline(fin, line)) {
+        std::vector<std::string> lineElements = splitByCharacter(line, ',');
+
+        std::vector<float> timeStep;
+        for (size_t i = 1; i < lineElements.size(); i++) {
+            float value = std::stof(lineElements.at(i));
+            timeStep.push_back(value);
+        }
+        outp.push_back(timeStep);
+    }
+
+    fin.close();
+    return outp;
+}
+
+/**
+ * @brief
+ *  - Returns a vector of emdw RV IDs, incrementing from given starting point
+ * @param
+ *  -
+ *  - numNodes: Number of RV IDs to create
+ *  - runningIdCount: Where to begin incrementing from (inclusive)
+ * @return
+ *  -
+ */
+std::vector<emdw::RVIdType> createNodeIds(int numNodes, uint &runningIdCount) {
+    std::vector<emdw::RVIdType> nodeIds;
+    for (int i = 0; i < numNodes; i++) {
+        nodeIds.push_back(runningIdCount);
+        runningIdCount += 1;
+    }
+    return nodeIds;
+}
+
+/**
+ * @brief
+ *  - Function to validate if RV ID generation was correct
+ *  - Will simply cycle through each given data structure and see if they are
+ * incrementing
+ * @param
+ *  -
+ * @return
+ *  - True (if Correct) or False (If Incorrect)
+ */
+bool validateRvIds(
+    const std::vector<emdw::RVIdType> &droughtStateIds,
+    const std::vector<std::vector<emdw::RVIdType>> &attributeIds) {
+    int lastItem = -1;
+
+    // Cylce Through hidden drought states
+    for (const emdw::RVIdType &droughtID : droughtStateIds) {
+        if (lastItem != droughtID - 1) return false;
+        lastItem += 1;
+    }
+
+    debugPrint(DEBUG, "Hidden Drought RVs Are Correctly Initialised");
+
+    // Cylce Through attribute RVs (Cycling the same as they were
+    // created...)
+    size_t T = attributeIds.size();
+    size_t N = attributeIds.at(0).size();
+    for (size_t t = 0; t < T; t++) {
+        for (size_t n = 0; n < N; n++) {
+            if (lastItem != attributeIds.at(t).at(n) - 1) return false;
+            lastItem += 1;
+        }
+    }
+    debugPrint(DEBUG, "Attribute RVs Are Correctly Initialised");
+    return true;
+}
+
+/**
+ * @brief
+ *  - This will create a `rcptr` of a vector of ints
+ *  - These ints then increment to max C
+ *  - Example with C = 3:
+ *      output: [1,2,3]
+ * @param
+ *  -
+ * @return
+ *  -
+ */
+rcptr<std::vector<int>> createDiscreteRvDomain(size_t C) {
+    rcptr<std::vector<int>> domain(new std::vector<int>());
+    for (int i = 1; i <= R; ++i) {
+        domain->push_back(i);
+    }
+    return domain;
+}

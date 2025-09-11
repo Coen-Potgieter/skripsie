@@ -2,6 +2,22 @@ import pandas as pd
 import numpy as np
 from scipy.stats import gamma, norm
 
+def save_dataframe(df: pd.DataFrame, csv_path: str, debug=False):
+    """
+    Save DataFrame to a CSV file.
+    
+    Args:
+        df: DataFrame to save
+        csv_path: Path where CSV file will be saved
+    
+    Returns:
+        None
+    """
+
+    df.to_csv(csv_path, index=False)
+
+    if debug:
+        print(f"Saved CSV to: `{csv_path}`")
 
 def get_nan_rain_values(data: pd.DataFrame, station):
     station_data = data[data["station"] == station]
@@ -19,7 +35,6 @@ def get_nan_rain_values(data: pd.DataFrame, station):
 
 
 def get_stations(data: pd.DataFrame):
-
     seenStations = []
     all_stations = data.loc[:, "station"].to_list()
 
@@ -101,57 +116,40 @@ def calculate_spi_station(df, scale=3):
     # Clean up helper column
     df.drop(columns=["precip_roll"], inplace=True)
 
+    # Add Month Column
+    df = add_month_name(df)
+
     return df
 
 
-def main():
+def add_month_name(df: pd.DataFrame):
+    # Add month abbreviation column
+    df['month_abbr'] = df['date'].dt.strftime('%b').str.upper()
+    return df
 
+
+
+def main():
+    # ==================== Pick CSV File ====================
     bad2 = "./data/10dayrain.csv"
-    dws_monthly_rainfall = "./data/DWSmon.csv"
     bad3 = "./data/Mon_dwb.csv"
     station_meta_data = "./data/WRZ2019meta.csv"
     dws_daily_rainfall = "./data/DWS2019.csv"
     bad1 = "./data/mm2019.csv"
     bad4 = "./data/SAWS_cumulates.csv"
 
-    # Filter to a single station
+    dws_monthly_rainfall = "./data/DWSmon.csv"
 
+    # ==================== Filter to a single station ====================
     data = pd.read_csv(dws_monthly_rainfall)
-
     buffeljags_df = data[data["station"] == "BUFFELJAGS"]
 
-    # Calculate 3-month SPI
+    # ==================== Calculate 3-month SPI ====================
     buffeljags_spi = calculate_spi_station(buffeljags_df, scale=3)
 
-    print(buffeljags_spi)
-    return
-
-    accumulate_monthly_rainfall(buffel_jags_data)
-
-    # print(buffel_jags_data)
-    return
-
-    stations = get_stations(data)
-
-    for station in stations:
-        print("Printing Nan Instances For:", station)
-        print(get_nan_rain_values(data, station))
-        print()
+    save_dataframe(buffeljags_spi, "./../combine_indices/data/buffeljags_spi.csv", debug=True)
 
     return
-
-    # print(data.columns)
-    # return
-
-    latest_data = data[(data["year"] == 2019) & (data["month"] == 6)]
-
-    print(latest_data)
-    return
-    print()
-    print(data.columns.to_list())
-    print(data.shape)
-    pass
-
 
 if __name__ == "__main__":
     main()

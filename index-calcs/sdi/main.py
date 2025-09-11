@@ -13,6 +13,23 @@ from dateutil.relativedelta import relativedelta
 import pandas as pd
 
 
+def save_dataframe(df: pd.DataFrame, csv_path: str, debug=False):
+    """
+    Save DataFrame to a CSV file.
+    
+    Args:
+        df: DataFrame to save
+        csv_path: Path where CSV file will be saved
+    
+    Returns:
+        None
+    """
+
+    df.to_csv(csv_path, index=False)
+
+    if debug:
+        print(f"Saved CSV to: `{csv_path}`")
+
 def split_date_range(start_date: datetime, end_date: datetime, max_years=20):
     start = start_date.date()
     end = end_date.date()
@@ -176,6 +193,7 @@ def scrape_all_station_metadata():
 
     for code in valid_region_codes:
         scrape_river_stations(code)
+
 
 
 def text_to_dataframe(raw_text):
@@ -381,6 +399,7 @@ def calc_sdi(df, k=3):
     Returns:
         pd.DataFrame with added 'SDI_k' column
     """
+
     # Sort chronologically
     df = df.sort_values(by=["YEAR", "MONTH"]).reset_index(drop=True)
 
@@ -396,16 +415,43 @@ def calc_sdi(df, k=3):
 
     return df
 
+def apply_filters(df: pd.DataFrame, filters: list):
+    """
+    Apply multiple boolean conditions to filter a DataFrame.
+    
+    Args:
+        df: Input DataFrame to filter
+        filters: List of boolean conditions (e.g., [df['col'] > 0, df['col2'] == 'value'])
+    
+    Returns:
+        Filtered DataFrame with rows satisfying all conditions
+    """
+
+    outp_df = df
+
+    for filter in filters:
+        outp_df = outp_df[filter]
+
+    return outp_df
 
 def main():
+    # ==================== Pick CSV File ====================
+    data_file = "./data/stream_flow_data/monthly/B1H012.csv"
 
-    df = pd.read_csv("./data/stream_flow_data/monthly/B1H012.csv")
+    # ==================== Extract Data ====================
+    df = pd.read_csv(data_file)
+
+    # ==================== Calc SDI ====================
     sdi_df = calc_sdi(df)
+    print(sdi_df)
 
-    cond1 = sdi_df["YEAR"] == 2020
-    cond2 = sdi_df["MONTH"] == 3
-    print(sdi_df[cond1])
+    save_dataframe(sdi_df, "./../combine_indices/data/sdi.csv", debug=True)
     return
+
+    # ==================== Applying Filters Example ====================
+    conds = [sdi_df["YEAR"] == 2020, sdi_df["MONTH"] == 3]
+    print(apply_filters(sdi_df, conds))
+
     print(sdi_df.head())
     # data_path = "./data/stream_flow_data/daily/B1H012.csv"
     # average_data(data_path)

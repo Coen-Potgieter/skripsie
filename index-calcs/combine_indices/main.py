@@ -1,0 +1,194 @@
+import pandas as pd
+import numpy as np
+
+
+def save_csv(df: pd.DataFrame, file_path):
+    df.to_csv(file_path)
+    print(f"Data Frame Saved To:`{file_path}`...")
+
+
+def combine_dataframes(sdi_df: pd.DataFrame, spi_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Combine two DataFrames on year and month, keeping only SDI_3 and SPI_3 columns.
+    Removes null values from the beginning and end of both SDI_3 and SPI_3 columns.
+
+    Args:
+        sdi_df: First DataFrame with YEAR, MONTH, and SDI_3 columns
+        spi_df: Second DataFrame with year, month, and SPI_3 columns
+
+    Returns:
+        Merged DataFrame with year, month, SDI_3, and SPI_3 columns
+    """
+    # Standardize column names and select relevant columns
+    sdi_df_clean = sdi_df[["YEAR", "MONTH", "SDI_3"]].rename(
+        columns={"YEAR": "year", "MONTH": "month"}
+    )
+    spi_df_clean = spi_df[["year", "month", "SPI_3"]]
+
+    # Merge on year and month, keeping only overlapping dates
+    merged_df = pd.merge(sdi_df_clean, spi_df_clean, on=["year", "month"], how="inner")
+
+    # Remove All NaNs
+    merged_df = merged_df.dropna(subset=["SDI_3", "SPI_3"])
+
+    return merged_df
+
+
+def find_missing_months(df: pd.DataFrame) -> list:
+    """
+    Checks a DataFrame for missing months between the earliest and latest dates.
+
+    The DataFrame must have 'year' and 'month' columns.
+
+    Args:
+        df: The pandas DataFrame to check.
+
+    Returns:
+        A list of tuples, where each tuple contains the (year, month)
+        of a missing period. Returns an empty list if there are no gaps.
+    """
+    # Create a 'date' column by combining 'year' and 'month'
+    # The day is set to 1 as a placeholder, it doesn't affect the logic.
+    df["date"] = pd.to_datetime(
+        df["year"].astype(str) + "-" + df["month"].astype(str) + "-01"
+    )
+
+    # Create a complete date range from the min to the max date with monthly frequency
+    expected_dates = pd.date_range(
+        start=df["date"].min(),
+        end=df["date"].max(),
+        freq="MS",  # 'MS' stands for Month Start frequency
+    )
+
+    # Identify the dates that are in our expected range but not in the DataFrame
+    # We use the .difference() method which is efficient for this comparison.
+    missing_dates = expected_dates.difference(df["date"])
+
+    # Format the missing dates into a list of (year, month) tuples for readability
+    missing_year_month = sorted([(date.year, date.month) for date in missing_dates])
+
+    return missing_year_month
+
+
+def apply_filters(df: pd.DataFrame, filters: list):
+    """
+    Apply multiple boolean conditions to filter a DataFrame.
+
+    Args:
+        df: Input DataFrame to filter
+        filters: List of boolean conditions (e.g., [df['col'] > 0, df['col2'] == 'value'])
+
+    Returns:
+        Filtered DataFrame with rows satisfying all conditions
+    """
+
+    outp_df = df
+
+    for filter in filters:
+        outp_df = outp_df[filter]
+
+    return outp_df
+
+
+def check_data(df: pd.DataFrame):
+    # Check Nans:
+    if df.isna().any().any():
+        print("THIS DATAFRAME HAS NaNs...")
+    else:
+        print("✓ No NaNs")
+
+    # Check Continuous Data
+    # Check if the DataFrame has continuous months without gaps
+    missing_months = find_missing_months(df)
+
+    if len(missing_months) != 0:
+        print("✗ Missing Months:")
+
+        for missing_date in missing_months:
+            print("\t", missing_date)
+    else:
+        print("✓ No Missing Dates")
+
+    # Print Range of specified columns
+    target_columns = ["SPI_3", "SDI_3"]
+
+    for col_name in target_columns:
+        vals = df.loc[:, col_name]
+        print(
+            f"{col_name} Range: [{np.round(vals.min(), 2)}, {np.round(vals.max(), 2)}]"
+        )
+
+
+def generate_data(T: int, attribute_types: dict):
+    """
+    Generates synthetic data for DNBC input.
+
+    Args:
+        T (int): Number of time steps
+        attribute_types (dict): Dictionary specifying attribute info.
+            Example:
+            {
+                "A1": {"type": "discrete", "cardinality": 3},
+                "A2": {"type": "continuous", "distribution": "normal", "mean": 0, "cov": 1},
+                "A3": {"type": "continuous", "distribution": "normal", "mean": [0,0], "cov": [[1,0],[0,1]]}
+            }
+
+    Returns:
+        pd.DataFrame: Columns -> [A1, A2, ... AN]
+    """
+
+    data = {}
+
+    for _, (attr, spec) in enumerate(attribute_types.items(), start=1):
+        if spec["type"] == "discrete":
+            # Uniform categorical distribution over cardinality
+            data[attr] = np.random.randint(0, spec["cardinality"], size=T)
+
+        elif spec["type"] == "continuous":
+            if spec["distribution"] == "normal":
+                mean = np.array(spec["mean"])
+                cov = np.array(spec["cov"])
+                # If mean is scalar, treat as 1D normal
+                if mean.size == 1 and cov.size == 1:
+                    data[attr] = np.random.normal(loc=mean, scale=np.sqrt(cov), size=T)
+                else:
+                    raise ValueError(
+                        "Stop trying to be clever... We not playing with multivariate normals. Remove it."
+                    )
+            else:
+                raise ValueError(
+                    f"Unsupported continuous distribution: {spec['distribution']}"
+                )
+        else:
+            raise ValueError(f"Unsupported attribute type: {spec['type']}")
+
+    df = pd.DataFrame(data)
+    return df
+
+
+def main():
+    attrs = {
+        "A1": {"type": "discrete", "cardinality": 4},
+        "A2": {"type": "discrete", "cardinality": 4},
+        # Example of cts Attribute "A2": {"type": "continuous", "distribution": "normal", "mean": 0, "cov": 1},
+    }
+
+    synthetic_data = generate_data(T=10, attribute_types=attrs)
+    print(synthetic_data)
+    save_csv(synthetic_data, file_path="../../data/synthetic/test.csv")
+    return
+
+    spi_path = "./data/buffeljags_spi.csv"
+    sdi_path = "./data/sdi.csv"
+
+    sdi_data = pd.read_csv(sdi_path)
+    spi_data = pd.read_csv(spi_path)
+
+    combined_df = combine_dataframes(spi_df=spi_data, sdi_df=sdi_data)
+
+    check_data(combined_df)
+    # print(combined_df)
+
+
+if __name__ == "__main__":
+    main()
