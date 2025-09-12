@@ -1,9 +1,3 @@
-/*
- * Author     :  (DSP Group, E&E Eng, US)
- * Created on :
- * Copyright  : University of Stellenbosch, all rights retained
- */
-
 // patrec headers
 #include "prlite_logging.hpp"  // initLogging
 #include "prlite_testing.hpp"
@@ -13,33 +7,59 @@
 #include "emdw.hpp"
 
 // standard headers
-#include <algorithm>
+#include <cassert>  // For assertions like python's `assert(condition)` functionality
 #include <cctype>    // toupper
 #include <iostream>  // cout, endl, flush, cin, cerr
-#include <limits>
-#include <map>
-#include <memory>
-#include <string>  // string
-#include <unordered_map>
-#include <vector>
+#include <limits>    // Not Sure
+#include <map>       // Sparse Probabilities for Factor Creation
+#include <memory>    // Not Sure
+#include <string>    // string
+#include <vector>    // Everything
 
+// Not using this but is being used by initialisation code
 using namespace std;
 using namespace emdw;
 
-bool DEBUG = true;
+// Some Variables That Will Be Used Throughtout Various Functiosn
+typedef DiscreteTable<int> DT;
+double defProb = 0.0;
 
+// ==================== Importing Data ====================
 std::vector<std::vector<float>> readCSV(std::string_view filePath,
                                         bool hasHeader = true);
+std::vector<std::string> splitByCharacter(const std::string &inputString,
+                                          const char &delimiter);
+
+// ==================== Printing Functions ====================
+void debugPrint(bool debug, std::string message);
+std::vector<emdw::RVIdType> createDiscreteRvIds(int numNodes,
+                                                uint &runningIdCount);
+void printDomainDroughtState(bool debug,
+                             const rcptr<std::vector<int>> &droughtStateDomain);
+void printDomainAttributeRVsDiscerete(
+    bool debug, const std::vector<rcptr<std::vector<int>>> &attributeRvDomains);
 template <typename T>
 void print2DArray(std::vector<std::vector<T>> inp);
-void debugPrint(bool debug, std::string message);
-std::vector<emdw::RVIdType> createNodeIds(int numNodes, uint &runningIdCount);
+
+// ==================== Model Setup ====================
 rcptr<std::vector<int>> createDiscreteRvDomain(size_t C);
+rcptr<Factor> createPriorS1Factor(
+    const rcptr<std::vector<int>> &droughtStateDomain,
+    const std::vector<double> &priorS1Estimates, const emdw::RVIdType &S1id,
+    const double &noiseVariance);
 
-bool validateRvIds(
-    const std::vector<emdw::RVIdType> &droughtStateIds,
-    const std::vector<std::vector<emdw::RVIdType>> &attributeIds);
+// ==================== Helper Functions ====================
+template <typename T>
+std::vector<T> findMaxAlongAxis(const std::vector<std::vector<T>> &inp,
+                                size_t axis = 0);
 
+// ==================== Validation Functions ====================
+bool validateRvIds(const bool &debug,
+                   const std::vector<emdw::RVIdType> &droughtStateIds,
+                   const std::vector<std::vector<emdw::RVIdType>> &attributeIds,
+                   const std::vector<std::vector<float>> &observedAttributes);
+
+// ==================== Main Function ====================
 int main(int, char *argv[]) {
     // NOTE: this activates logging and unit tests
     initLogging(argv[0]);
@@ -57,7 +77,16 @@ int main(int, char *argv[]) {
         //*********************************************************
         // Specify Parameters
         // *********************************************************
+
+        bool DEBUG = true;
         int m = 4;
+
+        // Noise to conditionally break symmetry of the model
+        float priorNoise = 0.005;
+        std::vector<double> priorS1Estimates(m, 1.0);
+        // std::vector<double> priorS1Estimates = {1, 1, 1, 1};
+
+        assert(m == priorS1Estimates.size());
 
         //*********************************************************
         // Load In Data
@@ -99,19 +128,19 @@ int main(int, char *argv[]) {
 
         // We will have T S_t RVs
         std::vector<emdw::RVIdType> droughtStateRvIDs =
-            createNodeIds(T, rvIdentity);
+            createDiscreteRvIds(T, rvIdentity);
 
         // Will access A_t^n IDs as a 2D matrix
         std::vector<std::vector<emdw::RVIdType>> attributeRvIds;
-        for (size_t n = 0; n < N; n++) {
+        for (size_t t = 0; t < T; t++) {
             std::vector<emdw::RVIdType> singleAttributeRvIds =
-                createNodeIds(T, rvIdentity);
+                createDiscreteRvIds(N, rvIdentity);
             attributeRvIds.push_back(singleAttributeRvIds);
         }
 
         // Check that all values are unique and of type `emdw::RVIdType`
-
-        if (!validateRvIds(droughtStateRvIDs, attributeRvIds)) {
+        if (!validateRvIds(DEBUG, droughtStateRvIDs, attributeRvIds,
+                           observedAttributes)) {
             std::cerr << "ERROR: Generation Of RV IDs Failed...\n";
             return 1;
         }
@@ -119,33 +148,59 @@ int main(int, char *argv[]) {
         debugPrint(DEBUG, "✓ Success!\n");
 
         //*********************************************************
-        // Define Factors
+        // Create Domain Of RVs
         // *********************************************************
-
-        debugPrint(DEBUG, "Defining Factors Of The Model...");
-
-        // ==================== Domain ====================
         //  - We need a `rcptr` of a vector of ints
         //  - This vector of ints will represent all the possible values the RV
-        //  can take on.
+        //      can take on.
         //  - This is quite simple but still out sourcing to a sperate function
         //  - Note that this is only for Discrete Factors... (I think)
 
-        // Hidden Drought State is simply `[1, 2, ..., m]`
-        rcptr<std::vector<int>> droughtDomain = createDiscreteRvDomain(m);
+        debugPrint(DEBUG, "Creating Domains Of The RVs Of The Model...");
 
-        // Here we have a vector of `rcptr<std::vector<int>>`s of course indexed
-        // by each attribute (Note: This is only for discrete A_t^n)
+        // Hidden Drought State is simply `[1, 2, ..., m]`
+        rcptr<std::vector<int>> droughtStateDomain = createDiscreteRvDomain(m);
+
+        // NOTE: This step will change if our attribute RVs are cts, ie. This is
+        // Discerete Case.
+        // Here we have a vector of `rcptr<std::vector<int>>`s
+        // of course indexed by each attribute (Note: This is only for discrete
+        // A_t^n)
         std::vector<rcptr<std::vector<int>>> attributeRvDomains;
 
-        // TODO: COME BACK HERE AND WORK ON THIS!!!!
+        // Along columns, thus `maxVals.size()` == N
+        std::vector<float> maxVals = findMaxAlongAxis(observedAttributes, 0);
+
         for (size_t n = 0; n < N; n++) {
-            float maxVal =
-                std::max_element() rcptr<std::vector<int>> droughtDomain =
-                    createDiscreteRvDomain(m);
+            // Convert to int
+            int maxVal = static_cast<int>(maxVals.at(n));
+            attributeRvDomains.push_back(createDiscreteRvDomain(maxVal));
         }
 
+        printDomainDroughtState(DEBUG, droughtStateDomain);
+        printDomainAttributeRVsDiscerete(DEBUG, attributeRvDomains);
+
         debugPrint(DEBUG, "✓ Success!\n");
+
+        //*********************************************************
+        // Define Factors Of Model
+        // *********************************************************
+        //  - Here we get the factors of the model, ie. the probability tables
+        //      and things
+
+        debugPrint(DEBUG, "Creating Factors Of The Model...");
+
+        // ==================== Priors → p(S_1) ====================
+        rcptr<Factor> pS1 =
+            createPriorS1Factor(droughtStateDomain, priorS1Estimates,
+                                droughtStateRvIDs.at(0), priorNoise);
+        std::cout << *pS1 << std::endl;
+
+        // ================= Transition → p(S_{t+1} | S_t) =================
+        // TODO: Got to function `createTransitionFactors`
+
+        // NOTE: This step will change if our attribute RVs are cts, ie.
+        // This is Discerete Case.
 
         return 0;  // tell the world that all is fine
     }  // try
@@ -172,13 +227,21 @@ int main(int, char *argv[]) {
         cerr << "An unknown exception / error occurred\n";
         throw;
     }  // catch
-
-}  // main
+}
 
 void debugPrint(bool debug, std::string message) {
     if (debug) std::cout << message << '\n';
 }
 
+/**
+ * @brief
+ *  - Splits input string by given delimiter
+ * @param
+ *  - `inputString`: Input String
+ *  - `delimiter`: Character To Split By
+ * @return
+ *  - Vector of split elements
+ */
 std::vector<std::string> splitByCharacter(const std::string &inputString,
                                           const char &delimiter) {
     std::vector<std::string> outp;
@@ -198,10 +261,6 @@ std::vector<std::string> splitByCharacter(const std::string &inputString,
 /**
  * @brief
  *  - Lil Bit of ASCII Art here :)
- * @param
- *  -
- * @return
- *  -
  */
 template <typename T>
 void print2DArray(std::vector<std::vector<T>> inp) {
@@ -276,7 +335,8 @@ std::vector<std::vector<float>> readCSV(std::string_view filePath,
  * @return
  *  -
  */
-std::vector<emdw::RVIdType> createNodeIds(int numNodes, uint &runningIdCount) {
+std::vector<emdw::RVIdType> createDiscreteRvIds(int numNodes,
+                                                uint &runningIdCount) {
     std::vector<emdw::RVIdType> nodeIds;
     for (int i = 0; i < numNodes; i++) {
         nodeIds.push_back(runningIdCount);
@@ -295,9 +355,10 @@ std::vector<emdw::RVIdType> createNodeIds(int numNodes, uint &runningIdCount) {
  * @return
  *  - True (if Correct) or False (If Incorrect)
  */
-bool validateRvIds(
-    const std::vector<emdw::RVIdType> &droughtStateIds,
-    const std::vector<std::vector<emdw::RVIdType>> &attributeIds) {
+bool validateRvIds(const bool &debug,
+                   const std::vector<emdw::RVIdType> &droughtStateIds,
+                   const std::vector<std::vector<emdw::RVIdType>> &attributeIds,
+                   const std::vector<std::vector<float>> &observedAttributes) {
     int lastItem = -1;
 
     // Cylce Through hidden drought states
@@ -306,8 +367,13 @@ bool validateRvIds(
         lastItem += 1;
     }
 
-    debugPrint(DEBUG, "Hidden Drought RVs Are Correctly Initialised");
+    debugPrint(debug, "Hidden Drought RVs Are Correctly Initialised");
 
+    // ensure that `attributeIds` & `observedAttributes` are the same size
+    if ((observedAttributes.size() != attributeIds.size()) ||
+        (observedAttributes.at(0).size() != attributeIds.at(0).size())) {
+        return false;
+    }
     // Cylce Through attribute RVs (Cycling the same as they were
     // created...)
     size_t T = attributeIds.size();
@@ -318,7 +384,7 @@ bool validateRvIds(
             lastItem += 1;
         }
     }
-    debugPrint(DEBUG, "Attribute RVs Are Correctly Initialised");
+    debugPrint(debug, "Attribute RVs Are Correctly Initialised");
     return true;
 }
 
@@ -328,15 +394,222 @@ bool validateRvIds(
  *  - These ints then increment to max C
  *  - Example with C = 3:
  *      output: [1,2,3]
- * @param
- *  -
- * @return
- *  -
  */
 rcptr<std::vector<int>> createDiscreteRvDomain(size_t C) {
     rcptr<std::vector<int>> domain(new std::vector<int>());
-    for (int i = 1; i <= R; ++i) {
+    for (int i = 1; i <= C; ++i) {
         domain->push_back(i);
     }
     return domain;
+}
+
+/**
+ * @brief
+ *  - Find Max of a given 2D array along a given axis
+ *  - Recall Axis things:
+ *      - if `axis=0` then we collapse the first dimension, meaning finding max
+ *          values over the columns
+ *      - Example:
+ *          std::vector<std::vector<int>> matrix = {{1, 2, 9},
+ *                                                  {4, 8, 6},
+ *                                                  {7, 5, 3}};
+ *          auto col_max = findMaxAlongAxis(matrix, axis=0);
+ *          -> Returns {7, 8, 9}
+ */
+template <typename T>
+std::vector<T> findMaxAlongAxis(const std::vector<std::vector<T>> &inp,
+                                size_t axis) {
+    // Handle empty input
+    if (inp.empty()) {
+        return std::vector<T>();
+    }
+
+    if (axis == 0) {
+        // Find max along columns (axis 0) - max of each column
+        size_t num_cols = inp[0].size();
+        std::vector<T> result(num_cols, std::numeric_limits<T>::lowest());
+
+        for (const auto &row : inp) {
+            // Check if all rows have the same number of columns
+            if (row.size() != num_cols) {
+                throw std::invalid_argument(
+                    "All rows must have the same number of columns");
+            }
+
+            for (size_t j = 0; j < num_cols; ++j) {
+                if (row[j] > result[j]) {
+                    result[j] = row[j];
+                }
+            }
+        }
+        return result;
+    } else if (axis == 1) {
+        // Find max along rows (axis 1) - max of each row
+        std::vector<T> result;
+        result.reserve(inp.size());
+
+        for (const auto &row : inp) {
+            if (row.empty()) {
+                result.push_back(std::numeric_limits<T>::lowest());
+                continue;
+            }
+
+            T max_val = row[0];
+            for (size_t j = 1; j < row.size(); ++j) {
+                if (row[j] > max_val) {
+                    max_val = row[j];
+                }
+            }
+            result.push_back(max_val);
+        }
+        return result;
+    } else {
+        throw std::invalid_argument("Axis must be 0 or 1");
+    }
+}
+
+/**
+ * @brief
+ *  - Prints Domain of Drought State RVs
+ * @param
+ *  - `debug`: Debug flag
+ *  - `droughtStateDomain`: Domain of S_t
+ */
+void printDomainDroughtState(
+    bool debug, const rcptr<std::vector<int>> &droughtStateDomain) {
+    if (!debug) return;
+
+    std::cout << "→ Drought State Domain: [";
+    for (size_t s = 0; s < droughtStateDomain->size(); s++) {
+        std::cout << droughtStateDomain->at(s);
+        if (s != droughtStateDomain->size() - 1) {
+            std::cout << ", ";
+        }
+    }
+    std::cout << "]\n";
+
+    return;
+}
+
+/**
+ * @brief
+ *  - Prints Domain of Discerete Attribute RVs
+ * @param
+ *  - `debug`: Debug flag
+ *  - `attributeRvDomains`: Domains of A_t^n
+ */
+void printDomainAttributeRVsDiscerete(
+    bool debug,
+    const std::vector<rcptr<std::vector<int>>> &attributeRvDomains) {
+    if (!debug) return;
+
+    for (size_t n = 0; n < attributeRvDomains.size(); n++) {
+        std::cout << "→ A^" << n + 1 << " Domain: [";
+
+        for (size_t t = 0; t < attributeRvDomains.at(n)->size(); t++) {
+            std::cout << attributeRvDomains.at(n)->at(t);
+            if (t != attributeRvDomains.at(n)->size() - 1) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << "]\n";
+    }
+    return;
+}
+
+/**
+ * @brief
+ *  - Creates p(S_1)
+ *  - See tablet notes for explanation
+ * @param
+ *  - `droughtStateDomain`: Domain of S_t
+ *   - `priorS1Estimates`: priors / parameters
+ *   - `S1id`: Id of RV S_1
+ *   - `noiseVariance`: Amount of variacne to break uniform distr
+ * @return
+ *  - p(S_1)
+ */
+rcptr<Factor> createPriorS1Factor(
+    const rcptr<std::vector<int>> &droughtStateDomain,
+    const std::vector<double> &priorS1Estimates, const emdw::RVIdType &S1id,
+    const double &noiseVariance) {
+    size_t m = droughtStateDomain->size();
+
+    // ==================== Lil Assurance Check ====================
+    if (m != priorS1Estimates.size()) {
+        throw std::invalid_argument(
+            "number prior S_1 estimates do not match domain of S_1...");
+    }
+
+    // ==================== Check If Close To Uniform ====================
+    //  - Checks if all elements are nearly identical to first element
+    //  - Rather crude....
+    bool isUniform = false;
+    double runningDiff = 0.0;
+    for (int i = 1; i < m; i++) {
+        runningDiff += std::abs(priorS1Estimates[0] - priorS1Estimates[i]);
+    }
+    if (runningDiff < std::pow(m, -2)) isUniform = true;
+
+    // ===== Create noise variable to conditionally eradicate symmetry =====
+    // This our random seed source
+    std::random_device rd{};
+    // Create RNG
+    std::mt19937 gen{rd()};
+    // Create normal distr object we can sample from
+    std::normal_distribution<double> noise_rv(0, std::sqrt(noiseVariance));
+
+    // ============== Dynamically Define Factor Potentials ==============
+    std::map<std::vector<int>, FProb> sparseProbs;
+
+    // Probs is taken from prior estimates
+    for (int i = 0; i < m; i++) {
+        // If uniform then add noise else add 0.0
+        sparseProbs[{droughtStateDomain->at(i)}] =
+            priorS1Estimates.at(i) + (isUniform ? noise_rv(gen) : 0.0);
+    }
+
+    // ==================== Create P(S_1) ====================
+    rcptr<Factor> factorS1 =
+        uniqptr<DT>(new DT({S1id}, {droughtStateDomain}, defProb, sparseProbs));
+
+    // Lets normalise the factor as well
+    factorS1 = factorS1->normalize();
+
+    return factorS1;
+}
+
+std::vector<rcptr<Factor>> createTransitionFactors(
+    const rcptr<std::vector<int>> &droughtStateDomain,
+    const std::vector<std::vector<double>> &transitionMatrix,
+    const std::vector<emdw::RVIdType> droughtStateIds) {
+    size_t m = droughtStateDomain->size();
+
+    // ==================== Lil Assurance Check ====================
+    if ((transitionMatrix.size() != m) ||
+        (transitionMatrix.at(0).size() != m)) {
+        throw std::invalid_argument(
+            "Given `transitionMatrix` is not size (m, m)");
+    }
+
+    // ============== Dynamically Define Factor Potentials ==============
+    std::map<std::vector<int>, FProb> sparseProbs;
+
+    for (size_t i = 0; i < m; i++) {
+        for (size_t j = 0; j < m; j++) {
+            sparseProbs[{droughtStateDomain->at(i),
+                         droughtStateDomain->at(j)}] =
+                transitionMatrix.at(i).at(j);
+        }
+    }
+
+    // TODO: YOURE SO CLOSE!!!!!
+    // ==================== Create P(S_{t+1} | S_t) ====================
+    rcptr<Factor> factorS1 =
+        uniqptr<DT>(new DT({S1id}, {droughtStateDomain}, defProb, sparseProbs));
+
+    // Lets normalise the factor as well
+    factorS1 = factorS1->normalize();
+
+    return factorS1;
 }

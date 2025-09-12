@@ -142,7 +142,7 @@ def generate_data(T: int, attribute_types: dict):
     for _, (attr, spec) in enumerate(attribute_types.items(), start=1):
         if spec["type"] == "discrete":
             # Uniform categorical distribution over cardinality
-            data[attr] = np.random.randint(0, spec["cardinality"], size=T)
+            data[attr] = np.random.randint(1, spec["cardinality"] + 1, size=T)
 
         elif spec["type"] == "continuous":
             if spec["distribution"] == "normal":
@@ -168,12 +168,12 @@ def generate_data(T: int, attribute_types: dict):
 
 def main():
     attrs = {
-        "A1": {"type": "discrete", "cardinality": 4},
-        "A2": {"type": "discrete", "cardinality": 4},
+        "A1": {"type": "discrete", "cardinality": 10},
+        "A2": {"type": "discrete", "cardinality": 2},
         # Example of cts Attribute "A2": {"type": "continuous", "distribution": "normal", "mean": 0, "cov": 1},
     }
 
-    synthetic_data = generate_data(T=10, attribute_types=attrs)
+    synthetic_data = generate_data(T=50, attribute_types=attrs)
     print(synthetic_data)
     save_csv(synthetic_data, file_path="../../data/synthetic/test.csv")
     return
