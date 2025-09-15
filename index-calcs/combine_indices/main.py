@@ -3,7 +3,7 @@ import numpy as np
 
 
 def save_csv(df: pd.DataFrame, file_path):
-    df.to_csv(file_path)
+    df.to_csv(file_path, index=False)
     print(f"Data Frame Saved To:`{file_path}`...")
 
 
@@ -166,14 +166,21 @@ def generate_data(T: int, attribute_types: dict):
     return df
 
 
+def extract_output():
+    data = pd.read_csv("../../data/synthetic/output.csv")
+    print(data)
+
+
 def main():
+    extract_output()
+    return
     attrs = {
-        "A1": {"type": "discrete", "cardinality": 10},
-        "A2": {"type": "discrete", "cardinality": 2},
+        "A1": {"type": "discrete", "cardinality": 8},
+        "A2": {"type": "discrete", "cardinality": 7},
         # Example of cts Attribute "A2": {"type": "continuous", "distribution": "normal", "mean": 0, "cov": 1},
     }
 
-    synthetic_data = generate_data(T=50, attribute_types=attrs)
+    synthetic_data = generate_data(T=300, attribute_types=attrs)
     print(synthetic_data)
     save_csv(synthetic_data, file_path="../../data/synthetic/test.csv")
     return

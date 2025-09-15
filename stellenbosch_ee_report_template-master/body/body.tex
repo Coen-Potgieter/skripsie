@@ -1,0 +1,103 @@
+\graphicspath{{body/fig/}}
+
+\chapter{Body}
+\label{chap:body}
+
+\section{Factors}
+
+Priors
+\[
+\begin{array}{c | c}
+S_1 & p(S_1) \\ 
+\hline
+1 & \pi_1 \\ 
+2 & \pi_2 \\ 
+\vdots & \vdots \\
+m & \pi_m \\ 
+\end{array} 
+\]
+
+Transition
+\[
+\begin{array}{ccc}
+\begin{array}{c c | c}
+S_t & S_{t+1} & p(S_{t+1} \mid S_t) \\ 
+\hline
+1 & 1  & a_{1,1} \\ 
+1 & 2  & a_{1,2} \\ 
+\vdots & \vdots  & \vdots \\
+1 & m  & a_{1,m} \\ 
+2 & 1  & a_{2,1} \\ 
+2 & 2  & a_{2,2} \\ 
+\vdots & \vdots  & \vdots \\
+m & m  & a_{m,m} \\ 
+\end{array} 
+&
+\equiv
+&
+P^1 = 
+\begin{bmatrix}
+a_{1,1} & a_{1,2} & \dots & a_{1,m} \\
+a_{2,1} & a_{2,2} & \dots & a_{2,m} \\
+\vdots & \vdots & \ddots & \vdots \\
+a_{m,1} & a_{m,2} & \dots & a_{m,m} \\
+\end{bmatrix}
+\end{array} 
+\]
+
+
+Emission
+\[
+\begin{array}{c c | c}
+A^{(n)}_t & S_t & p(A^{(n)}_t \mid S_t) \\ 
+\hline
+1 & 1  & b_1^{(n)}(1) \\ 
+1 & 2  & b_2^{(n)}(1) \\ 
+\vdots & \vdots  & \vdots \\
+1 & m  & b_m^{(n)}(1) \\ 
+2 & 1  & b_1^{(n)}(2) \\ 
+2 & 2  & b_2^{(n)}(2) \\ 
+\vdots & \vdots  & \vdots \\
+C_n & m  & b_m^{(n)}(C_n) \\ 
+\end{array} 
+\]
+
+\newpage
+
+\section{Update Equations}
+Priors:
+\begin{equation}
+\pi_i^{\text{new}} = q(S_1=i)
+\label{eq:prior_update}
+\end{equation}
+
+Transition Probabilities:
+\begin{equation}
+a_{ij}^{\text{new}} = \frac{\sum\limits_{t=1}^{T - 1} q(S_t=i,S_{t+1}=j)}{\sum\limits_{t=1}^{T-1} q(S_t=i)}
+\label{eq:transition_update}
+\end{equation}
+
+
+Emission Probabilities:
+\begin{equation}
+b_i^{(n)}(j)^{\text{new}} = \frac{\sum\limits_{t=1}^T q(S_t = i) \cdot I(A_t^{(n)} = j)}{\sum\limits_{t=1}^T q(S_t = i)}
+\label{eq:emission_update}
+\end{equation}
+
+We can now reference these equations by their label: Equation~\ref{eq:prior_update}, Equation~\ref{eq:transition_update} or Equation~\ref{eq:emission_update}. This is wicked, lemme tell you
+
+\newpage
+
+\section{FIGURES TIME}
+
+things before figure
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=\linewidth]{model-drawing.png}
+    \caption[I am the short caption that appears in the list of figures, without references.]{ I am a caption below the figure of course}
+    \label{fig:model-drawing}
+\end{figure}
+
+We can also reference this guy with a cheeky Figure~\ref{fig:model-drawing}
+
