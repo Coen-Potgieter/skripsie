@@ -108,6 +108,10 @@ performLBU_LTRIP_discrete(
     const std::vector<emdw::RVIdType> &droughtStateRvIDs,
     const std::vector<std::vector<emdw::RVIdType>> &attributeRvIds,
     const std::vector<std::vector<float>> &observedAttributes);
+void runModel(const size_t m,
+              const std::vector<std::vector<float>> &observedAttributes,
+              std::string_view outputPathCSV, const size_t maxIters = 10,
+              const bool debug = true);
 
 // ==================== Main Function ====================
 int main(int, char *argv[]) {
@@ -124,31 +128,13 @@ int main(int, char *argv[]) {
         emdw::randomEngine.setSeedVal(seedVal);
         std::cout << "emdw things are done...\n\n\n\n\n";
 
-        //*********************************************************
-        // Specify Parameters
-        // *********************************************************
         bool DEBUG = true;
         size_t maxIters = 10;
         size_t m = 7;
 
-        // TODO: ASK ABOUT THIS
-        // Noise to conditionally break symmetry of the model
-        float priorNoise = 0.005;
-
-        // Create Prior Params
-        std::vector<double> oldPriors = createRandomPriors(m, 0.0, 1.0);
-        // Create Transition Params
-        std::vector<std::vector<double>> oldTransitionMatrix =
-            createRandomTransitionParams(m, 0.0, 1.0);
-
-        assert(m == oldPriors.size());
-        assert(m == oldTransitionMatrix.size());
-        assert(m == oldTransitionMatrix.at(0).size());
-
         //*********************************************************
         // Load In Data
         // *********************************************************
-
         // Specify CSV Path
         std::string inpPathCSV = "../../../data/synthetic/test.csv";
 
@@ -166,347 +152,7 @@ int main(int, char *argv[]) {
         // Print Attributes
         if (DEBUG) print2DArray(observedAttributes);
 
-        // ============ Populate Useful Variables Here, Now  ============
-        size_t T = observedAttributes.size();
-        size_t N = observedAttributes.at(0).size();
-        debugPrint(DEBUG, "# Time Steps → T = " + std::to_string(T));
-        debugPrint(DEBUG, "# Attribute RVs → N = " + std::to_string(N));
-
-        debugPrint(DEBUG, "✓ Success!\n");
-
-        //*********************************************************
-        // Generate RV IDs
-        // *********************************************************
-
-        debugPrint(DEBUG, "Creating RV IDs...");
-
-        // Starting ID
-        uint rvIdentity = 0;
-
-        // We will have T S_t RVs
-        std::vector<emdw::RVIdType> droughtStateRvIDs =
-            createDiscreteRvIds(T, rvIdentity);
-
-        // Will access A_t^n IDs as a 2D matrix
-        std::vector<std::vector<emdw::RVIdType>> attributeRvIds;
-        for (size_t t = 0; t < T; t++) {
-            std::vector<emdw::RVIdType> singleAttributeRvIds =
-                createDiscreteRvIds(N, rvIdentity);
-            attributeRvIds.push_back(singleAttributeRvIds);
-        }
-
-        // Check that all values are unique and of type `emdw::RVIdType`
-        if (!validateRvIds(DEBUG, droughtStateRvIDs, attributeRvIds,
-                           observedAttributes)) {
-            std::cerr << "ERROR: Generation Of RV IDs Failed...\n";
-            return 1;
-        }
-
-        debugPrint(DEBUG, "✓ Success!\n");
-
-        //*********************************************************
-        // Create Domain Of RVs
-        // *********************************************************
-        //  - We need a `rcptr` of a vector of ints
-        //  - This vector of ints will represent all the possible values the
-        //  RV
-        //      can take on.
-        //  - This is quite simple but still out sourcing to a sperate
-        //  function
-        //  - Note that this is only for Discrete Factors... (I think)
-
-        debugPrint(DEBUG, "Creating Domains Of The RVs Of The Model...");
-
-        // Hidden Drought State is simply `[1, 2, ..., m]`
-        rcptr<std::vector<int>> droughtStateDomain = createDiscreteRvDomain(m);
-
-        // NOTE: This step will change if our attribute RVs are cts, ie.
-        // This is Discerete Case. Here we have a vector of
-        // `rcptr<std::vector<int>>`s of course indexed by each attribute
-        // (Note: This is only for discrete A_t^n)
-        std::vector<rcptr<std::vector<int>>> attributeRvDomains;
-
-        // Along columns, thus `maxVals.size()` == N
-        std::vector<float> maxVals = findMaxAlongAxis(observedAttributes, 0);
-
-        for (size_t n = 0; n < N; n++) {
-            // Convert to int
-            int maxVal = static_cast<int>(maxVals.at(n));
-            attributeRvDomains.push_back(createDiscreteRvDomain(maxVal));
-        }
-
-        printDomainDroughtState(DEBUG, droughtStateDomain);
-        printDomainAttributeRVsDiscerete(DEBUG, attributeRvDomains);
-
-        debugPrint(DEBUG, "✓ Success!\n");
-
-        //*********************************************************
-        // Define Factors Of Model
-        // *********************************************************
-        //  - Here we get the factors of the model, ie. the probability
-        //  tables
-        //      and things
-
-        debugPrint(DEBUG, "Creating Factors Of The Model...");
-
-        // ==================== Priors → p(S_1) ====================
-        rcptr<Factor> pS1 = createPriorS1Factor(
-            droughtStateDomain, oldPriors, droughtStateRvIDs.at(0), priorNoise);
-
-        if (DEBUG) printFactor(*pS1, "p(S_1)");
-
-        // ================= Transition → p(S_{t+1} | S_t) =================
-
-        std::vector<rcptr<Factor>> transitionFactors = createTransitionFactors(
-            droughtStateDomain, oldTransitionMatrix, droughtStateRvIDs);
-
-        if (DEBUG) printFactor(*transitionFactors.at(0), "p(S_2 | S_1)");
-
-        // Change this flag for very comprehensive test
-        if (false) {
-            if (DEBUG) printFactor(*transitionFactors.at(1), "p(S_3 | S_2)");
-            if (DEBUG)
-                printFactor(*transitionFactors.at(transitionFactors.size() - 1),
-                            "p(S_" + std::to_string(T) + " | S_" +
-                                std::to_string(T - 1) + ")");
-            print2DArray(oldTransitionMatrix);
-        }
-
-        // ================= Emission → p(A_t^n | S_t) =================
-        // NOTE: This step will change if our attribute RVs are cts, ie.
-        // This is Discerete Case.
-
-        // Create Parameters
-        std::vector<std::vector<std::vector<double>>> oldEmissionProbs =
-            createEmissionParamsDiscrete(attributeRvDomains, m);
-
-        assert(oldEmissionProbs.size() == N);
-
-        if (DEBUG) {
-            for (int n = 0; n < N; n++) {
-                print2DArray(oldEmissionProbs.at(n),
-                             "Params For A^" + std::to_string(n + 1));
-                std::cout << '\n';
-            }
-        }
-
-        // Create Factors
-        std::vector<std::vector<rcptr<Factor>>> emissionFactors =
-            createEmissionFactorsDiscrete(droughtStateRvIDs, attributeRvIds,
-                                          droughtStateDomain,
-                                          attributeRvDomains, oldEmissionProbs);
-
-        if (DEBUG) printFactor(*emissionFactors.at(0).at(1), "p(A^2_1 | S_1)");
-
-        debugPrint(DEBUG, "✓ Success!\n");
-        //*********************************************************
-        // EM ALGORITHM!!!!
-        // *********************************************************
-
-        debugPrint(DEBUG, "Performing EM Algorithm...");
-
-        // ==================== Initialise Loop Params ====================
-        size_t numIter = 1;
-        // Timer
-        auto startEM = std::chrono::high_resolution_clock::now();
-        auto endEM = std::chrono::high_resolution_clock::now();
-        while (1) {
-            // ============= Obtain p(H|D, Theta) (E-Step) ============
-            std::pair<ClusterGraph, std::map<Idx2, rcptr<Factor>>> outp =
-                performLBU_LTRIP_discrete(pS1, transitionFactors,
-                                          emissionFactors, droughtStateRvIDs,
-                                          attributeRvIds, observedAttributes);
-            auto &[cg, msgs] = outp;
-
-            // ================ Parameter Update (M-Step) ================
-
-            // Cache marginals to avoid redundant queries
-            std::vector<rcptr<Factor>> marginalCache(T);
-            for (size_t t = 0; t < T; t++) {
-                marginalCache[t] =
-                    queryLBU_CG(cg, msgs, {droughtStateRvIDs.at(t)})
-                        ->normalize();
-            }
-
-            // Cache pairwise marginals for transitions
-            std::vector<rcptr<Factor>> pairwiseCache(T - 1);
-            for (size_t t = 0; t < T - 1; t++) {
-                pairwiseCache[t] = queryLBU_CG(cg, msgs,
-                                               {droughtStateRvIDs.at(t),
-                                                droughtStateRvIDs.at(t + 1)})
-                                       ->normalize();
-            }
-
-            // 1) Priors (π_j)
-            std::vector<double> newPriors;
-            for (size_t i = 1; i <= m; i++) {
-                newPriors.push_back(
-                    marginalCache[0]->potentialAt({0}, {int(i)}));
-            }
-
-            if (newPriors.size() != oldPriors.size())
-                throw std::runtime_error("Update Rule For Priors Failed...");
-
-            // 2) Transition Probs (a_{i,j})
-            std::vector<std::vector<double>> newTransitionMatrix;
-
-            // Pre-compute denominators for all states
-            //  - Note: stateCounts[0] is left at 0.0 and is never accessed
-            std::vector<double> stateCounts(m + 1, 0.0);
-            for (size_t t = 0; t < T - 1; t++) {
-                for (size_t i = 1; i <= m; i++) {
-                    stateCounts[i] += marginalCache[t]->potentialAt(
-                        {droughtStateRvIDs.at(t)}, {int(i)});
-                }
-            }
-
-            // Numerator now
-            for (size_t i = 1; i <= m; i++) {
-                std::vector<double> newRow;
-
-                for (size_t j = 1; j <= m; j++) {
-                    double runningNumerator = 0.0;
-                    for (size_t t = 0; t < T - 1; t++) {
-                        runningNumerator += pairwiseCache[t]->potentialAt(
-                            {droughtStateRvIDs.at(t),
-                             droughtStateRvIDs.at(t + 1)},
-                            {int(i), int(j)});
-                    }
-                    newRow.push_back(runningNumerator / stateCounts[i]);
-                }
-                newTransitionMatrix.push_back(std::move(newRow));
-            }
-
-            // Sanity Check
-            if ((newTransitionMatrix.size() != oldTransitionMatrix.size()) ||
-                (newTransitionMatrix.at(0).size() !=
-                 oldTransitionMatrix.at(0).size()))
-                throw std::runtime_error(
-                    "Update Rule For Transition Probs Failed...");
-
-            // 3) Emission Probs (b_i^(n)(j))
-            std::vector<std::vector<std::vector<double>>> newEmissionProbs;
-
-            // Pre-compute state counts across all time steps (Denominator)
-            //  - Note: totalStateCounts[0] is left at 0.0 and is never accessed
-            std::vector<double> totalStateCounts(m + 1, 0.0);
-            for (size_t t = 0; t < T; t++) {
-                for (size_t i = 1; i <= m; i++) {
-                    totalStateCounts[i] += marginalCache[t]->potentialAt(
-                        {droughtStateRvIDs.at(t)}, {int(i)});
-                }
-            }
-
-            // Numerator now
-            for (size_t n = 0; n < N; n++) {
-                size_t Cn = attributeRvDomains.at(n)->size();
-
-                // Size of B_n: (C_n, m)
-                std::vector<std::vector<double>> inpMatrix(
-                    Cn, std::vector<double>(m, 0.0));
-
-                // Count state-observation co-occurrences
-                std::vector<std::vector<double>> stateObsCounts(
-                    m + 1, std::vector<double>(Cn + 1, 0.0));
-
-                for (size_t t = 0; t < T; t++) {
-                    // TODO: This code assumes A^n_t is discrete
-                    int observedValue = observedAttributes.at(t).at(n);
-                    for (size_t i = 1; i <= m; i++) {
-                        stateObsCounts[i][observedValue] +=
-                            marginalCache[t]->potentialAt(
-                                {droughtStateRvIDs.at(t)}, {int(i)});
-                    }
-                }
-
-                // Compute emission probabilities
-                for (size_t i = 1; i <= m; i++) {
-                    for (size_t j = 1; j <= Cn; j++) {
-                        inpMatrix[j - 1][i - 1] =
-                            stateObsCounts[i][j] / totalStateCounts[i];
-                    }
-                }
-
-                // `std::move()` transfers ownership to `newEmissionProbs`
-                //  instead of copying the matrix over
-                newEmissionProbs.push_back(std::move(inpMatrix));
-            }
-
-            // Sanity Check
-            if ((newEmissionProbs.size() != oldEmissionProbs.size()) ||
-                (newEmissionProbs.size() != N))
-                throw std::runtime_error(
-                    "Update Rule For Emission Probs Failed...");
-            for (size_t n = 0; n < N; n++) {
-                size_t Cn = attributeRvDomains.at(n)->size();
-
-                if (newEmissionProbs.at(n).size() !=
-                        oldEmissionProbs.at(n).size() ||
-                    (newEmissionProbs.at(n).size() != Cn))
-                    throw std::runtime_error(
-                        "Update Rule For Emission Probs Failed...");
-
-                if ((newEmissionProbs.at(n).at(0).size() !=
-                     oldEmissionProbs.at(n).at(0).size()) ||
-                    (newEmissionProbs.at(n).at(0).size() != m))
-                    throw std::runtime_error(
-                        "Update Rule For Emission Probs Failed...");
-            }
-
-            // ================== Print Loop Information ==================
-            std::cout << "Iteration " << numIter << '\n';
-            printVector(oldPriors, "Old Priors");
-            printVector(newPriors, "New Priors");
-
-            print2DArray(oldTransitionMatrix, "Old Transition Matrix");
-            print2DArray(newTransitionMatrix, "New Transition Matrix");
-
-            // TODO:
-            std::cout << "Not printing emission probs...\n";
-
-            std::cout << "------------------------\n\n";
-
-            // ============= Iterate Loop & Exit Condition =============
-            numIter += 1;
-            if (numIter > maxIters) {
-                // End Timer
-                endEM = std::chrono::high_resolution_clock::now();
-
-                debugPrint(DEBUG, "Saving Output");
-                saveModelOutput("../../../data/synthetic/output.csv", cg, msgs,
-                                m, droughtStateRvIDs);
-                break;
-            }
-
-            // ============= Update Old Params For Next Loop
-            oldPriors = newPriors;
-            oldTransitionMatrix = newTransitionMatrix;
-            oldEmissionProbs = newEmissionProbs;
-
-            // ============= Create New Model (New Factors) =============
-            // Priors
-            pS1 = createPriorS1Factor(droughtStateDomain, oldPriors,
-                                      droughtStateRvIDs.at(0), priorNoise);
-            // Transition
-            transitionFactors = createTransitionFactors(
-                droughtStateDomain, oldTransitionMatrix, droughtStateRvIDs);
-
-            // Emission
-            // NOTE: This is Discerete Case.
-            emissionFactors = createEmissionFactorsDiscrete(
-                droughtStateRvIDs, attributeRvIds, droughtStateDomain,
-                attributeRvDomains, oldEmissionProbs);
-        }
-
-        // ==================== End Timer ====================
-        std::chrono::duration<double> elapsedEM = endEM - startEM;
-
-        // ==================== Display Info ====================
-        std::cout << '\n'
-                  << numIter << " Iterations of EM algorithm completed in : "
-                  << elapsedEM.count() << " seconds\n\n";
-
-        debugPrint(DEBUG, "✓ Success");
+        runModel(m, observedAttributes, "../../../data/synthetic/output.csv");
 
         return 0;  // tell the world that all is fine
     }  // try
@@ -1365,8 +1011,397 @@ performLBU_LTRIP_discrete(
     return std::make_pair(cg, msgs);
 }
 
-// // TODO: CHANGE ALL `DEBUG` TO `debug`
-// void performModelSelection(const bool debug, const size_t emIters,
-//                            std::string_view inpPathCSV,
+void runModel(const size_t m,
+              const std::vector<std::vector<float>> &observedAttributes,
+              std::string_view outputPathCSV, const size_t maxIters,
+              const bool debug) {
+    //*********************************************************
+    // Specify Parameters
+    // *********************************************************
+    // TODO: ASK ABOUT THIS
+    // Noise to conditionally break symmetry of the model
+    float priorNoise = 0.005;
 
-// ) {}
+    // Create Prior Params
+    std::vector<double> oldPriors = createRandomPriors(m, 0.0, 1.0);
+    // Create Transition Params
+    std::vector<std::vector<double>> oldTransitionMatrix =
+        createRandomTransitionParams(m, 0.0, 1.0);
+
+    // Ensure sizes
+    assert(m == oldPriors.size());
+    assert((m == oldTransitionMatrix.size()) &&
+           (m == oldTransitionMatrix.at(0).size()));
+
+    // ============ Populate Useful Variables Here, Now  ============
+    size_t T = observedAttributes.size();
+    size_t N = observedAttributes.at(0).size();
+    debugPrint(debug, "# Time Steps → T = " + std::to_string(T));
+    debugPrint(debug, "# Attribute RVs → N = " + std::to_string(N));
+
+    debugPrint(debug, "✓ Success!\n");
+
+    //*********************************************************
+    // Generate RV IDs
+    // *********************************************************
+
+    debugPrint(debug, "Creating RV IDs...");
+
+    // Starting ID
+    uint rvIdentity = 0;
+
+    // We will have T S_t RVs
+    std::vector<emdw::RVIdType> droughtStateRvIDs =
+        createDiscreteRvIds(T, rvIdentity);
+
+    // Will access A_t^n IDs as a 2D matrix
+    std::vector<std::vector<emdw::RVIdType>> attributeRvIds;
+    for (size_t t = 0; t < T; t++) {
+        std::vector<emdw::RVIdType> singleAttributeRvIds =
+            createDiscreteRvIds(N, rvIdentity);
+        attributeRvIds.push_back(singleAttributeRvIds);
+    }
+
+    // Check that all values are unique and of type `emdw::RVIdType`
+    if (!validateRvIds(debug, droughtStateRvIDs, attributeRvIds,
+                       observedAttributes))
+        throw std::runtime_error("ERROR: Generation Of RV IDs Failed...\n");
+
+    debugPrint(debug, "✓ Success!\n");
+
+    //*********************************************************
+    // Create Domain Of RVs
+    // *********************************************************
+    //  - We need a `rcptr` of a vector of ints
+    //  - This vector of ints will represent all the possible values the
+    //  RV
+    //      can take on.
+    //  - This is quite simple but still out sourcing to a sperate
+    //  function
+    //  - Note that this is only for Discrete Factors... (I think)
+
+    debugPrint(debug, "Creating Domains Of The RVs Of The Model...");
+
+    // Hidden Drought State is simply `[1, 2, ..., m]`
+    rcptr<std::vector<int>> droughtStateDomain = createDiscreteRvDomain(m);
+
+    // NOTE: This step will change if our attribute RVs are cts, ie.
+    // This is Discerete Case. Here we have a vector of
+    // `rcptr<std::vector<int>>`s of course indexed by each attribute
+    // (Note: This is only for discrete A_t^n)
+    std::vector<rcptr<std::vector<int>>> attributeRvDomains;
+
+    // Along columns, thus `maxVals.size()` == N
+    std::vector<float> maxVals = findMaxAlongAxis(observedAttributes, 0);
+
+    for (size_t n = 0; n < N; n++) {
+        // Convert to int
+        int maxVal = static_cast<int>(maxVals.at(n));
+        attributeRvDomains.push_back(createDiscreteRvDomain(maxVal));
+    }
+
+    printDomainDroughtState(debug, droughtStateDomain);
+    printDomainAttributeRVsDiscerete(debug, attributeRvDomains);
+
+    debugPrint(debug, "✓ Success!\n");
+
+    //*********************************************************
+    // Define Factors Of Model
+    // *********************************************************
+    //  - Here we get the factors of the model, ie. the probability
+    //  tables
+    //      and things
+
+    debugPrint(debug, "Creating Factors Of The Model...");
+
+    // ==================== Priors → p(S_1) ====================
+    rcptr<Factor> pS1 = createPriorS1Factor(
+        droughtStateDomain, oldPriors, droughtStateRvIDs.at(0), priorNoise);
+
+    if (debug) printFactor(*pS1, "p(S_1)");
+
+    // ================= Transition → p(S_{t+1} | S_t) =================
+    std::vector<rcptr<Factor>> transitionFactors = createTransitionFactors(
+        droughtStateDomain, oldTransitionMatrix, droughtStateRvIDs);
+
+    if (debug) printFactor(*transitionFactors.at(0), "p(S_2 | S_1)");
+
+    // Change this flag for very comprehensive test
+    if (false) {
+        if (debug) printFactor(*transitionFactors.at(1), "p(S_3 | S_2)");
+        if (debug)
+            printFactor(*transitionFactors.at(transitionFactors.size() - 1),
+                        "p(S_" + std::to_string(T) + " | S_" +
+                            std::to_string(T - 1) + ")");
+        print2DArray(oldTransitionMatrix);
+    }
+
+    // ================= Emission → p(A_t^n | S_t) =================
+    // NOTE: This step will change if our attribute RVs are cts, ie.
+    // This is Discerete Case.
+
+    // Create Parameters
+    std::vector<std::vector<std::vector<double>>> oldEmissionProbs =
+        createEmissionParamsDiscrete(attributeRvDomains, m);
+
+    assert(oldEmissionProbs.size() == N);
+
+    if (debug) {
+        for (int n = 0; n < N; n++) {
+            print2DArray(oldEmissionProbs.at(n),
+                         "Params For A^" + std::to_string(n + 1));
+            std::cout << '\n';
+        }
+    }
+
+    // Create Factors
+    std::vector<std::vector<rcptr<Factor>>> emissionFactors =
+        createEmissionFactorsDiscrete(droughtStateRvIDs, attributeRvIds,
+                                      droughtStateDomain, attributeRvDomains,
+                                      oldEmissionProbs);
+
+    if (debug) printFactor(*emissionFactors.at(0).at(1), "p(A^2_1 | S_1)");
+
+    debugPrint(debug, "✓ Success!\n");
+    //*********************************************************
+    // EM ALGORITHM!!!!
+    // *********************************************************
+
+    debugPrint(debug, "Performing EM Algorithm...");
+
+    // ==================== Initialise Loop Params ====================
+    size_t numIter = 1;
+    // Timer
+    auto startEM = std::chrono::high_resolution_clock::now();
+    auto endEM = std::chrono::high_resolution_clock::now();
+    while (1) {
+        // ============= Obtain p(H|D, Theta) (E-Step) ============
+        std::pair<ClusterGraph, std::map<Idx2, rcptr<Factor>>> outp =
+            performLBU_LTRIP_discrete(pS1, transitionFactors, emissionFactors,
+                                      droughtStateRvIDs, attributeRvIds,
+                                      observedAttributes);
+        auto &[cg, msgs] = outp;
+
+        // ================ Parameter Update (M-Step) ================
+
+        // Cache marginals to avoid redundant queries
+        std::vector<rcptr<Factor>> marginalCache(T);
+        for (size_t t = 0; t < T; t++) {
+            marginalCache[t] =
+                queryLBU_CG(cg, msgs, {droughtStateRvIDs.at(t)})->normalize();
+        }
+
+        // Cache pairwise marginals for transitions
+        std::vector<rcptr<Factor>> pairwiseCache(T - 1);
+        for (size_t t = 0; t < T - 1; t++) {
+            pairwiseCache[t] = queryLBU_CG(cg, msgs,
+                                           {droughtStateRvIDs.at(t),
+                                            droughtStateRvIDs.at(t + 1)})
+                                   ->normalize();
+        }
+
+        // 1) Priors (π_j)
+        std::vector<double> newPriors;
+        for (size_t i = 1; i <= m; i++) {
+            newPriors.push_back(marginalCache[0]->potentialAt({0}, {int(i)}));
+        }
+
+        if (newPriors.size() != oldPriors.size())
+            throw std::runtime_error("Update Rule For Priors Failed...");
+
+        // 2) Transition Probs (a_{i,j})
+        std::vector<std::vector<double>> newTransitionMatrix;
+
+        // Pre-compute denominators for all states
+        //  - Note: stateCounts[0] is left at 0.0 and is never accessed
+        std::vector<double> stateCounts(m + 1, 0.0);
+        for (size_t t = 0; t < T - 1; t++) {
+            for (size_t i = 1; i <= m; i++) {
+                stateCounts[i] += marginalCache[t]->potentialAt(
+                    {droughtStateRvIDs.at(t)}, {int(i)});
+            }
+        }
+
+        // Numerator now
+        for (size_t i = 1; i <= m; i++) {
+            std::vector<double> newRow;
+
+            for (size_t j = 1; j <= m; j++) {
+                double runningNumerator = 0.0;
+                for (size_t t = 0; t < T - 1; t++) {
+                    runningNumerator += pairwiseCache[t]->potentialAt(
+                        {droughtStateRvIDs.at(t), droughtStateRvIDs.at(t + 1)},
+                        {int(i), int(j)});
+                }
+                newRow.push_back(runningNumerator / stateCounts[i]);
+            }
+            newTransitionMatrix.push_back(std::move(newRow));
+        }
+
+        // Sanity Check
+        if ((newTransitionMatrix.size() != oldTransitionMatrix.size()) ||
+            (newTransitionMatrix.at(0).size() !=
+             oldTransitionMatrix.at(0).size()))
+            throw std::runtime_error(
+                "Update Rule For Transition Probs Failed...");
+
+        // 3) Emission Probs (b_i^(n)(j))
+        std::vector<std::vector<std::vector<double>>> newEmissionProbs;
+
+        // Pre-compute state counts across all time steps (Denominator)
+        //  - Note: totalStateCounts[0] is left at 0.0 and is never accessed
+        std::vector<double> totalStateCounts(m + 1, 0.0);
+        for (size_t t = 0; t < T; t++) {
+            for (size_t i = 1; i <= m; i++) {
+                totalStateCounts[i] += marginalCache[t]->potentialAt(
+                    {droughtStateRvIDs.at(t)}, {int(i)});
+            }
+        }
+
+        // Numerator now
+        for (size_t n = 0; n < N; n++) {
+            size_t Cn = attributeRvDomains.at(n)->size();
+
+            // Size of B_n: (C_n, m)
+            std::vector<std::vector<double>> inpMatrix(
+                Cn, std::vector<double>(m, 0.0));
+
+            // Count state-observation co-occurrences
+            std::vector<std::vector<double>> stateObsCounts(
+                m + 1, std::vector<double>(Cn + 1, 0.0));
+
+            for (size_t t = 0; t < T; t++) {
+                // TODO: This code assumes A^n_t is discrete
+                int observedValue = observedAttributes.at(t).at(n);
+                for (size_t i = 1; i <= m; i++) {
+                    stateObsCounts[i][observedValue] +=
+                        marginalCache[t]->potentialAt({droughtStateRvIDs.at(t)},
+                                                      {int(i)});
+                }
+            }
+
+            // Compute emission probabilities
+            for (size_t i = 1; i <= m; i++) {
+                for (size_t j = 1; j <= Cn; j++) {
+                    inpMatrix[j - 1][i - 1] =
+                        stateObsCounts[i][j] / totalStateCounts[i];
+                }
+            }
+
+            // `std::move()` transfers ownership to `newEmissionProbs`
+            //  instead of copying the matrix over
+            newEmissionProbs.push_back(std::move(inpMatrix));
+        }
+
+        // Sanity Check
+        if ((newEmissionProbs.size() != oldEmissionProbs.size()) ||
+            (newEmissionProbs.size() != N))
+            throw std::runtime_error(
+                "Update Rule For Emission Probs Failed...");
+        for (size_t n = 0; n < N; n++) {
+            size_t Cn = attributeRvDomains.at(n)->size();
+
+            if (newEmissionProbs.at(n).size() !=
+                    oldEmissionProbs.at(n).size() ||
+                (newEmissionProbs.at(n).size() != Cn))
+                throw std::runtime_error(
+                    "Update Rule For Emission Probs Failed...");
+
+            if ((newEmissionProbs.at(n).at(0).size() !=
+                 oldEmissionProbs.at(n).at(0).size()) ||
+                (newEmissionProbs.at(n).at(0).size() != m))
+                throw std::runtime_error(
+                    "Update Rule For Emission Probs Failed...");
+        }
+
+        // ================== Print Loop Information ==================
+
+        if (debug) {
+            std::cout << "Iteration " << numIter << '\n';
+            printVector(oldPriors, "Old Priors");
+            printVector(newPriors, "New Priors");
+
+            print2DArray(oldTransitionMatrix, "Old Transition Matrix");
+            print2DArray(newTransitionMatrix, "New Transition Matrix");
+
+            // TODO:
+            std::cout << "Not printing emission probs...\n";
+
+            std::cout << "------------------------\n\n";
+        }
+
+        // ============= Iterate Loop & Exit Condition =============
+        numIter += 1;
+        if (numIter > maxIters) {
+            // End Timer
+            endEM = std::chrono::high_resolution_clock::now();
+
+            debugPrint(debug, "Saving Output");
+
+            // This is the condition for not saving output (AIC, BIC, Log L)
+            if (outputPathCSV == "None") {
+                size_t freeParams = m + m * m;
+                for (size_t n = 0; n < N; n++) {
+                    size_t Cn = attributeRvDomains.at(n)->size();
+                    freeParams += Cn * m;
+                }
+                size_t numDataPoints = T;
+
+                // ============= Naive Way To Get Log Likelihood =============
+                // Joint distr
+                rcptr<Factor> jointDistr = pS1->absorb(transitionFactors.at(0));
+
+                for (size_t t = 1; t < transitionFactors.size(); t++) {
+                    jointDistr->absorb(transitionFactors.at(t));
+                }
+                for (size_t n = 0; n < N; n++) {
+                    for (size_t t = 0; t < T; t++) {
+                        jointDistr->absorb(emissionFactors.at(t).at(n));
+                    }
+                }
+
+                // Marginalise out all S_t ie. Only keep attribute RVs
+                std::vector<emdw::RVIdType> attributeRVIdsFlat;
+
+                // for (size_t t = 0; t < T; t++) {
+                //     jointDistr->marginalize()
+                // }
+            } else {
+                saveModelOutput(outputPathCSV, cg, msgs, m, droughtStateRvIDs);
+            }
+
+            break;
+        }
+
+        // ============= Update Old Params For Next Loop
+        oldPriors = newPriors;
+        oldTransitionMatrix = newTransitionMatrix;
+        oldEmissionProbs = newEmissionProbs;
+
+        // ============= Create New Model (New Factors) =============
+        // Priors
+        pS1 = createPriorS1Factor(droughtStateDomain, oldPriors,
+                                  droughtStateRvIDs.at(0), priorNoise);
+        // Transition
+        transitionFactors = createTransitionFactors(
+            droughtStateDomain, oldTransitionMatrix, droughtStateRvIDs);
+
+        // Emission
+        // NOTE: This is Discerete Case.
+        emissionFactors = createEmissionFactorsDiscrete(
+            droughtStateRvIDs, attributeRvIds, droughtStateDomain,
+            attributeRvDomains, oldEmissionProbs);
+    }
+
+    // ==================== End Timer ====================
+    std::chrono::duration<double> elapsedEM = endEM - startEM;
+
+    // ==================== Display Info ====================
+    std::cout << '\n'
+              << numIter << " Iterations of EM algorithm completed in : "
+              << elapsedEM.count() << " seconds\n\n";
+
+    debugPrint(debug, "✓ Success");
+}
+
+void selectm() {}

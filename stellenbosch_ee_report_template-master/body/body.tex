@@ -12,6 +12,8 @@
     \label{fig:model-drawing}
 \end{figure}
 
+This is a reference to Figure~\ref{fig:model-drawing}
+
 RVs:
 \begin{itemize}
     \item Hidden Drought State RVs $\equiv S_t = \{1,2,\dots,m\}$    
@@ -98,6 +100,45 @@ C_n & m  & b_m^{(n)}(C_n) \\
 \end{array} 
 \]
 
+
+\section{EM Theory}
+
+\begin{itemize}
+    \item $\mathcal{H} = (S_t)_{t=1}^T$
+    \item $\mathcal{D} = (\vec{A}_t)_{t=1}^T$ 
+    \item $\Theta = (\vec{\theta}_1, \vec{\theta}_2, \vec{\theta}_3)$
+    \item $\vec{\theta}_1 = \{\pi_1, \pi_2, \dots, \pi_m\} \equiv S_1 \text{ Priors}$
+    \item $\vec{\theta}_2 = \{a_{1,1}, a_{1,2}, \dots, a_{m,m}\} = P^1 \equiv \text{Transition Probabilities}$
+    \item $\vec{\theta}_3 = \{b_1^{(n)}(1), b_2^{(n)}(1), \dots, b_1^{(N)}(m)\} = P^1 \equiv \text{Emission Probabilities}$
+\end{itemize}
+
+\subsection{E-Step}
+
+Hold $\Theta$ fixed and choose $q$ such that 
+\[
+    \begin{aligned}
+        q(\mathcal{H}) &= p(\mathcal{H} \mid \mathcal{D}, \Theta) \\
+        &= p(\vec{S}_{1:T} \mid A_{1:T}, \Theta)
+    \end{aligned}
+\]
+
+
+\subsection{M-Step}
+
+Hold $q$ fixed and optimise $\mathscr{L}(q, \Theta)$ w.r.t $\Theta$ 
+
+
+After some math, this means finding $\Theta$ such that:
+\[
+    \begin{aligned}
+        \Theta &= \underset{\Theta}{\operatorname{argmax}} Q(\Theta) \\
+        &= \underset{\Theta}{\operatorname{argmax}} \sum\limits_{\mathcal{H}} q(\mathcal{H}) \cdot \text{log} \hspace{0.1cm} p(\mathcal{D}, \mathcal{H} \mid \Theta)
+    \end{aligned}
+\]
+
+
+
+
 \newpage
 
 \section{Update Equations}
@@ -128,7 +169,6 @@ We can now reference these equations by their label: Equation~\ref{eq:prior_upda
 
 things before figure
 
-We can also reference this guy with a cheeky Figure~\ref{fig:model-drawing}
 
 
 \section{Determining $m$}
@@ -157,7 +197,7 @@ How do i do this? Is it just creating the model for various values of $m$ and ch
 \]
 
 \[
-    BIC = -2 \hspace{0.1cm}\text{log}L + p \text{log} k
+    BIC = -2 \; \text{log}L + p \text{log} k
 \]
 
 Where $L \equiv$ the maximized value of the likelihood function for the estimated model
@@ -165,6 +205,75 @@ Where $L \equiv$ the maximized value of the likelihood function for the estimate
 $p \equiv$ the number of free parameters, 
 
 $k \equiv$ the number of data points. 
+
+
+\subsection{How To Get $\text{log} \; \ell$}
+
+I am not using the Forward Backward algorithm, I am using the EM algorithm that means the factors I have readily available are:
+
+\begin{itemize}
+\item $q(\mathcal{H}) = p(\vec{S}_{1:T} \mid A_{1:T}, \Theta)$
+\item $p(S_1)$
+\item $p(S_{t+1} \mid S_t)$
+\item $p(A^{(n)}_t \mid S_t)$
+\end{itemize}
+
+If I can still use the forward equations, let me know. Otherwise I need to calculate the full joint distr and marginalise out?
+
+
+A little bit embarrassing but how exactly do we get the log likelihood, the naive way. My understanding is that we:
+\begin{enumerate}
+    \item Calculate the full joint distribution: 
+    \[
+p(\vec{S}_{1:T}, A_{1:T}) = p(S_1) \cdot \prod\limits_{t=1}^{T-1} p(S_{t+1} \mid S_t) \cdot \prod\limits_{n=1}^{N} \prod\limits_{t=1}^T p(A^{(n)}_t \mid S_t)
+    \]
+    \item Marginalise out all $S_t$: 
+        \[
+p(A_{1:T} \mid \Theta) = \sum_{S_{1:T}} p(\vec{S}_{1:T}, A_{1:T} \mid \Theta)
+        \]
+    \item Then Observe Actual Data and sum the probs?
+        \[
+            \text{Likelihood} = \sum p(A_{1:T} = \mathcal{D}) ??
+        \]
+\end{enumerate}
+
+
+I don't know what you mean by me being stuck. I get parameters which are the probabilities to the factors I am looking for. The model output is the max value $S_t$ which i get from my $q$ function. Let me know if I am overlooking something.
+
+
+With regards to the AIC \& BIC calcs. you have here $\ell(\Theta) = \sum_{S_{1:T}} p(\vec{S}_{1:T}, A_{1:T})$ but this leaves us with a factor not a single value? This is required for AIC and BIC which are single values? This is why I thought you must sum over observations?
+
+
+
+
+Okay Ill stop faffing. Forward-Backward is new, I didnt want to waste a time sink learning it. Especially because this LBU + EM is much more flexible of a route which is good for me since I plan to expand this model. One idea I have is to introduce second-order markov property to the thing. Is Forward-Backward still feasible for a DNBC with the second order markov property? If not I am sticking to LBU. And thus maybe need an alternative to AIC and BIC. But let me know your thoughts.
+
+
+\newpage
+
+\section{Questions}
+
+\begin{enumerate}
+    \item Forward-Backward Equations. I have to right? From what I can see it applies to second order as well when we vectorise our states? 
+        \begin{itemize}
+            \item Its only really a problem to try and get $log \; \ell(\Theta)$ for AIC and BIC. Besides this it works fine? 
+            \item is extracting $S_t$ from $q(\mathcal{H})$ fine and correct? Since we want $p(S_t)$ not \\ 
+                $p(S_t \mid A_{1:T})$...
+        \end{itemize}
+    \item Based on this as about LBU things:
+        \begin{enumerate}
+            \item emdw has this \verb|#include "lbu2_cg.hpp"|. What is this??
+            \item Ask about LTRIP vs other methods $\rightarrow$ Other Methods: BETHE, JTREE
+        \end{enumerate}
+    \item Breaking symmetry for the priors $p(S_1)$. Is it necessary?
+    \item With regards to BIC \& AIC, we need $k \equiv \text{Number of Free Parameters}$ (See calcs on \verb|model-dev-clean| pg 11)
+    \item Discrete vs Cts Attribute RVs. See \verb|model-dev-clean| pg 10
+    \item \verb|main.cpp| line 951
+
+\end{enumerate}
+
+
+
 
 
 
