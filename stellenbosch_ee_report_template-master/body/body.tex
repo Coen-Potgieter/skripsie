@@ -3,6 +3,42 @@
 \chapter{Body}
 \label{chap:body}
 
+\section{Model Definition}
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=\linewidth]{model-drawing.png}
+    \caption[I am the short caption that appears in the list of figures, without references.]{ I am a caption below the figure of course}
+    \label{fig:model-drawing}
+\end{figure}
+
+RVs:
+\begin{itemize}
+    \item Hidden Drought State RVs $\equiv S_t = \{1,2,\dots,m\}$    
+    \item Attribute RVs $\equiv A^{(n)}_t = \{1,2,\dots,C_n\}$
+\end{itemize}
+
+Some further notation:
+\begin{itemize}
+    \item $\vec{S}_{1:T}  = \{S_1,S_2,\dots,S_T\}$    
+    \item $A_{1:T} = \{\vec{A}_1,\vec{A}_2,\dots,\vec{A}_T\}$
+    \begin{itemize}
+        \item Where $\vec{A}_t = \{ A^{(1)}_t, A^{(2)}_t, \dots, A^{(N)}_t\}$
+    \end{itemize}
+\end{itemize}
+
+
+\subsection{Joint Distribution}
+
+\[
+\begin{align}
+    &p(S_1, S_2, \dots, S_T, A^{(1)}_1, A^{(2)}_1, \dots, A^{(N)}_1, A^{(1)}_2, \dots, A^{(N)}_T) \\ 
+    &= p(S_1, S_2, \dots, S_T, \vec{A}_1, \vec{A}_2, \dots, \vec{A}_T) \\
+    &= p(\vec{S}_{1:T}, A_{1:T}) \\
+    &= p(S_1) \cdot \prod\limits_{t=1}^{T-1} p(S_{t+1} \mid S_t) \cdot \prod\limits_{n=1}^{N} \prod\limits_{t=1}^T p(A^{(n)}_t \mid S_t)
+\end{align}
+\]
+
 \section{Factors}
 
 Priors
@@ -92,12 +128,43 @@ We can now reference these equations by their label: Equation~\ref{eq:prior_upda
 
 things before figure
 
-\begin{figure}[!h]
-    \centering
-    \includegraphics[width=\linewidth]{model-drawing.png}
-    \caption[I am the short caption that appears in the list of figures, without references.]{ I am a caption below the figure of course}
-    \label{fig:model-drawing}
-\end{figure}
-
 We can also reference this guy with a cheeky Figure~\ref{fig:model-drawing}
+
+
+\section{Determining $m$}
+
+Okay some questions:
+\begin{enumerate}
+    \item I have one sequence of $T$ observations with $N$ variables being observed at each $t$ step. Would my $k$ then be $T \times N$ or would it just be $T$?
+    \item Define, algebraically, exactly what my $L$ should be that I need to calculate
+\end{enumerate}
+
+Okay progress update:
+I have built the model. I have used synthetic data for model development. We have:
+
+
+Note: Our attribute RVs are discrete. 
+
+Model works with a set $m$ but the paper estimates this value using maximized log-likelihood, AIC and BIC
+How do i do this? Is it just creating the model for various values of $m$ and choosing the one that returns the lowest AIC, BIC and largest log-likelihood?
+
+
+
+
+ Consequently, in analyzing the drought indices, the number of latent states m was the first quantity we wanted to extract. We considered a simple procedure based on information criteria, which is a usual tool for model selection. The model with the optimal number of latent states was expected to best explain the data with a minimum number of free parameters. We used the  given as follows:
+\[
+    AIC = -2 \hspace{0.1cm} \text{log} L + 2p
+\]
+
+\[
+    BIC = -2 \hspace{0.1cm}\text{log}L + p \text{log} k
+\]
+
+Where $L \equiv$ the maximized value of the likelihood function for the estimated model
+
+$p \equiv$ the number of free parameters, 
+
+$k \equiv$ the number of data points. 
+
+
 

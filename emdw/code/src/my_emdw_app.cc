@@ -6,6 +6,7 @@
 #include "clustergraph.hpp"
 #include "discretetable.hpp"
 #include "emdw.hpp"
+// TODO: ASK ABOUT THIS
 #include "lbu2_cg.hpp"  // ????
 #include "lbu_cg.hpp"
 #include "messagequeue.hpp"
@@ -28,20 +29,9 @@ using namespace emdw;
 typedef DiscreteTable<int> DT;
 double defProb = 0.0;
 
-// ==================== Importing Data ====================
-std::vector<std::vector<float>> readCSV(std::string_view filePath,
-                                        bool hasHeader = true);
-std::vector<std::string> splitByCharacter(const std::string &inputString,
-                                          const char &delimiter);
-
-// ==================== Printing Functions ====================
+// ==================== Helper Functions ====================
+// Print Functions
 void debugPrint(bool debug, std::string message);
-std::vector<emdw::RVIdType> createDiscreteRvIds(int numNodes,
-                                                uint &runningIdCount);
-void printDomainDroughtState(bool debug,
-                             const rcptr<std::vector<int>> &droughtStateDomain);
-void printDomainAttributeRVsDiscerete(
-    bool debug, const std::vector<rcptr<std::vector<int>>> &attributeRvDomains);
 void printFactor(const Factor &factor, std::string_view factorName);
 template <typename T>
 void print2DArray(std::vector<std::vector<T>> inp,
@@ -49,8 +39,45 @@ void print2DArray(std::vector<std::vector<T>> inp,
 template <typename T>
 void printVector(std::vector<T> inp,
                  std::string_view vectorName = "Some Vector");
+void printDomainDroughtState(bool debug,
+                             const rcptr<std::vector<int>> &droughtStateDomain);
+void printDomainAttributeRVsDiscerete(
+    bool debug, const std::vector<rcptr<std::vector<int>>> &attributeRvDomains);
+// Misc
+std::vector<std::string> splitByCharacter(const std::string &inputString,
+                                          const char &delimiter);
+template <typename T>
+std::vector<T> findMaxAlongAxis(const std::vector<std::vector<T>> &inp,
+                                size_t axis = 0);
+template <typename T>
+std::vector<T> createRandomVector(const size_t vecSize, const T mean = 0,
+                                  const T variance = 1);
+
+// ==================== File Handling ====================
+// Input
+std::vector<std::vector<float>> readCSV(std::string_view filePath,
+                                        bool hasHeader = true);
+// Output
+void saveModelOutput(std::string_view filePath, ClusterGraph &cg,
+                     std::map<Idx2, rcptr<Factor>> &msgs, const int m,
+                     const std::vector<emdw::RVIdType> &droughtStateRvIDs);
+
+// ==================== Creating Params ====================
+std::vector<double> createRandomPriors(const int m, const double mean = 0.0,
+                                       const double variance = 1.0);
+std::vector<std::vector<double>> createRandomTransitionParams(
+    const int m, const double mean = 0.0, const double variance = 1.0);
+std::vector<std::vector<std::vector<double>>> createEmissionParamsDiscrete(
+    const std::vector<rcptr<std::vector<int>>> &attributeRvDomains,
+    const size_t m, const double variance = 1.0, const double mean = 0);
+
 // ==================== Model Setup ====================
+// ID Creation
+std::vector<emdw::RVIdType> createDiscreteRvIds(int numNodes,
+                                                uint &runningIdCount);
+// Domain Creation
 rcptr<std::vector<int>> createDiscreteRvDomain(size_t C);
+// Factor Creation
 rcptr<Factor> createPriorS1Factor(
     const rcptr<std::vector<int>> &droughtStateDomain,
     const std::vector<double> &oldPriors, const emdw::RVIdType &S1id,
@@ -59,23 +86,12 @@ std::vector<rcptr<Factor>> createTransitionFactors(
     const rcptr<std::vector<int>> &droughtStateDomain,
     const std::vector<std::vector<double>> &transitionMatrix,
     const std::vector<emdw::RVIdType> &droughtStateIds);
-std::vector<std::vector<std::vector<double>>> createEmissionParamsDiscrete(
-    const std::vector<rcptr<std::vector<int>>> &attributeRvDomains,
-    const size_t m, const double variance = 1.0, const double mean = 0);
 std::vector<std::vector<rcptr<Factor>>> createEmissionFactorsDiscrete(
     const std::vector<emdw::RVIdType> &droughtStateRvIDs,
     const std::vector<std::vector<emdw::RVIdType>> &attributeRvIds,
     const rcptr<std::vector<int>> &droughtStateDomain,
     const std::vector<rcptr<std::vector<int>>> &attributeRvDomains,
     const std::vector<std::vector<std::vector<double>>> &emissionProbs);
-
-// ==================== Helper Functions ====================
-void saveModelOutput(std::string_view filePath, ClusterGraph &cg,
-                     std::map<Idx2, rcptr<Factor>> &msgs, const int m,
-                     const std::vector<emdw::RVIdType> &droughtStateRvIDs);
-template <typename T>
-std::vector<T> findMaxAlongAxis(const std::vector<std::vector<T>> &inp,
-                                size_t axis = 0);
 
 // ==================== Validation Functions ====================
 bool validateRvIds(const bool &debug,
@@ -111,24 +127,19 @@ int main(int, char *argv[]) {
         //*********************************************************
         // Specify Parameters
         // *********************************************************
-
         bool DEBUG = true;
         size_t maxIters = 10;
         size_t m = 7;
 
+        // TODO: ASK ABOUT THIS
         // Noise to conditionally break symmetry of the model
         float priorNoise = 0.005;
-        std::vector<double> oldPriors(m, 1.0);
-        // std::vector<double> oldPriors = {1, 1, 1, 1};
 
-        // std::vector<std::vector<double>> oldTransitionMatrix = {
-        //     {1.1, 1.2, 1.3},
-        //     {2.1, 2.2, 2.3},
-        //     {3.1, 3.2, 3.3},
-        // };
-
-        std::vector<std::vector<double>> oldTransitionMatrix(
-            m, std::vector<double>(m, 2));
+        // Create Prior Params
+        std::vector<double> oldPriors = createRandomPriors(m, 0.0, 1.0);
+        // Create Transition Params
+        std::vector<std::vector<double>> oldTransitionMatrix =
+            createRandomTransitionParams(m, 0.0, 1.0);
 
         assert(m == oldPriors.size());
         assert(m == oldTransitionMatrix.size());
@@ -139,14 +150,14 @@ int main(int, char *argv[]) {
         // *********************************************************
 
         // Specify CSV Path
-        std::string csv_path = "../../../data/synthetic/test.csv";
+        std::string inpPathCSV = "../../../data/synthetic/test.csv";
 
         // Load Data
         debugPrint(DEBUG,
-                   "Loading Drought Indices From '" + csv_path + "' ...");
+                   "Loading Drought Indices From '" + inpPathCSV + "' ...");
         std::vector<std::vector<float>> observedAttributes;
         try {
-            observedAttributes = readCSV(csv_path);
+            observedAttributes = readCSV(inpPathCSV);
         } catch (std::exception &e) {
             std::cerr << "ERROR: " << e.what() << '\n';
             return 1;
@@ -296,11 +307,9 @@ int main(int, char *argv[]) {
 
         // ==================== Initialise Loop Params ====================
         size_t numIter = 1;
-
-        // ==================== Timer ====================
+        // Timer
         auto startEM = std::chrono::high_resolution_clock::now();
         auto endEM = std::chrono::high_resolution_clock::now();
-
         while (1) {
             // ============= Obtain p(H|D, Theta) (E-Step) ============
             std::pair<ClusterGraph, std::map<Idx2, rcptr<Factor>>> outp =
@@ -311,127 +320,125 @@ int main(int, char *argv[]) {
 
             // ================ Parameter Update (M-Step) ================
 
-            // TODO: Doing Incredibly Naive Approach With Gross Number Of
-            // Loops,
-            //  Will Clean Later
+            // Cache marginals to avoid redundant queries
+            std::vector<rcptr<Factor>> marginalCache(T);
+            for (size_t t = 0; t < T; t++) {
+                marginalCache[t] =
+                    queryLBU_CG(cg, msgs, {droughtStateRvIDs.at(t)})
+                        ->normalize();
+            }
 
-            // Priors (π_j)
+            // Cache pairwise marginals for transitions
+            std::vector<rcptr<Factor>> pairwiseCache(T - 1);
+            for (size_t t = 0; t < T - 1; t++) {
+                pairwiseCache[t] = queryLBU_CG(cg, msgs,
+                                               {droughtStateRvIDs.at(t),
+                                                droughtStateRvIDs.at(t + 1)})
+                                       ->normalize();
+            }
+
+            // 1) Priors (π_j)
             std::vector<double> newPriors;
-            rcptr<Factor> qS1 =
-                queryLBU_CG(cg, msgs, {droughtStateRvIDs.at(0)})->normalize();
-            for (int i = 1; i <= m; i++) {
-                newPriors.push_back(qS1->potentialAt({0}, {int(i)}));
+            for (size_t i = 1; i <= m; i++) {
+                newPriors.push_back(
+                    marginalCache[0]->potentialAt({0}, {int(i)}));
             }
 
             if (newPriors.size() != oldPriors.size())
                 throw std::runtime_error("Update Rule For Priors Failed...");
 
-            // Transition Probs (a_{i,j})
+            // 2) Transition Probs (a_{i,j})
             std::vector<std::vector<double>> newTransitionMatrix;
 
-            // Using this `i` as values, thus is `int` & begins at 1 instead
-            // of
-            //  `size_t` that begins at 0
-            for (int i = 1; i <= m; i++) {
-                std::vector<double> newRow;
-                // Denominator
-                double runningSumOverTm1_qStEi = 0.0;
-                for (size_t t = 0; t < T - 1; t++) {
-                    rcptr<Factor> qSt =
-                        queryLBU_CG(cg, msgs, {droughtStateRvIDs.at(t)})
-                            ->normalize();
-                    runningSumOverTm1_qStEi +=
-                        qSt->potentialAt({droughtStateRvIDs.at(t)}, {i});
+            // Pre-compute denominators for all states
+            //  - Note: stateCounts[0] is left at 0.0 and is never accessed
+            std::vector<double> stateCounts(m + 1, 0.0);
+            for (size_t t = 0; t < T - 1; t++) {
+                for (size_t i = 1; i <= m; i++) {
+                    stateCounts[i] += marginalCache[t]->potentialAt(
+                        {droughtStateRvIDs.at(t)}, {int(i)});
                 }
-                // Same Story as for `i`
-                for (int j = 1; j <= m; j++) {
-                    // Numerator
-                    double runningSumOverTm1_qStEiJqStp1Ej = 0.0;
-                    for (size_t t = 0; t < T - 1; t++) {
-                        // Sum over q(S_t = i, S_{t+1} = j)
-                        rcptr<Factor> qStStp1 =
-                            queryLBU_CG(cg, msgs,
-                                        {droughtStateRvIDs.at(t),
-                                         droughtStateRvIDs.at(t + 1)})
-                                ->normalize();
-
-                        runningSumOverTm1_qStEiJqStp1Ej +=
-                            qStStp1->potentialAt({droughtStateRvIDs.at(t),
-                                                  droughtStateRvIDs.at(t + 1)},
-                                                 {i, j});
-                    }
-                    newRow.push_back(runningSumOverTm1_qStEiJqStp1Ej /
-                                     runningSumOverTm1_qStEi);
-                }
-                newTransitionMatrix.push_back(newRow);
             }
 
-            // Size check
+            // Numerator now
+            for (size_t i = 1; i <= m; i++) {
+                std::vector<double> newRow;
+
+                for (size_t j = 1; j <= m; j++) {
+                    double runningNumerator = 0.0;
+                    for (size_t t = 0; t < T - 1; t++) {
+                        runningNumerator += pairwiseCache[t]->potentialAt(
+                            {droughtStateRvIDs.at(t),
+                             droughtStateRvIDs.at(t + 1)},
+                            {int(i), int(j)});
+                    }
+                    newRow.push_back(runningNumerator / stateCounts[i]);
+                }
+                newTransitionMatrix.push_back(std::move(newRow));
+            }
+
+            // Sanity Check
             if ((newTransitionMatrix.size() != oldTransitionMatrix.size()) ||
                 (newTransitionMatrix.at(0).size() !=
                  oldTransitionMatrix.at(0).size()))
                 throw std::runtime_error(
                     "Update Rule For Transition Probs Failed...");
 
-            // Emission Probs (b_i^(n)(j))
+            // 3) Emission Probs (b_i^(n)(j))
             std::vector<std::vector<std::vector<double>>> newEmissionProbs;
 
+            // Pre-compute state counts across all time steps (Denominator)
+            //  - Note: totalStateCounts[0] is left at 0.0 and is never accessed
+            std::vector<double> totalStateCounts(m + 1, 0.0);
+            for (size_t t = 0; t < T; t++) {
+                for (size_t i = 1; i <= m; i++) {
+                    totalStateCounts[i] += marginalCache[t]->potentialAt(
+                        {droughtStateRvIDs.at(t)}, {int(i)});
+                }
+            }
+
+            // Numerator now
             for (size_t n = 0; n < N; n++) {
                 size_t Cn = attributeRvDomains.at(n)->size();
+
+                // Size of B_n: (C_n, m)
                 std::vector<std::vector<double>> inpMatrix(
                     Cn, std::vector<double>(m, 0.0));
 
-                for (int i = 1; i <= m; i++) {
-                    // Denominator
-                    double runningSumOverT_qStEi = 0.0;
-                    for (size_t t = 0; t < T; t++) {
-                        rcptr<Factor> qSt =
-                            queryLBU_CG(cg, msgs, {droughtStateRvIDs.at(t)})
-                                ->normalize();
-                        runningSumOverT_qStEi +=
-                            qSt->potentialAt({droughtStateRvIDs.at(t)}, {i});
+                // Count state-observation co-occurrences
+                std::vector<std::vector<double>> stateObsCounts(
+                    m + 1, std::vector<double>(Cn + 1, 0.0));
+
+                for (size_t t = 0; t < T; t++) {
+                    // TODO: This code assumes A^n_t is discrete
+                    int observedValue = observedAttributes.at(t).at(n);
+                    for (size_t i = 1; i <= m; i++) {
+                        stateObsCounts[i][observedValue] +=
+                            marginalCache[t]->potentialAt(
+                                {droughtStateRvIDs.at(t)}, {int(i)});
                     }
+                }
 
-                    for (int j = 1; j <= Cn; j++) {
-                        // Numerator
-                        double runningSumOverT_qStEi_with_AntEj = 0.0;
-                        for (size_t t = 0; t < T; t++) {
-                            if (observedAttributes.at(t).at(n) == j) {
-                                rcptr<Factor> qSt =
-                                    queryLBU_CG(cg, msgs,
-                                                {droughtStateRvIDs.at(t)})
-                                        ->normalize();
-                                runningSumOverT_qStEi_with_AntEj +=
-                                    qSt->potentialAt({droughtStateRvIDs.at(t)},
-                                                     {i});
-                            }  // End of if
-                        }  // End of t loop
-
+                // Compute emission probabilities
+                for (size_t i = 1; i <= m; i++) {
+                    for (size_t j = 1; j <= Cn; j++) {
                         inpMatrix[j - 1][i - 1] =
-                            runningSumOverT_qStEi_with_AntEj /
-                            runningSumOverT_qStEi;
-                    }  // End of j loop
-                }  // End of i loop
-                newEmissionProbs.push_back(inpMatrix);
-            }  // End of n loop
+                            stateObsCounts[i][j] / totalStateCounts[i];
+                    }
+                }
 
-            // Size check
+                // `std::move()` transfers ownership to `newEmissionProbs`
+                //  instead of copying the matrix over
+                newEmissionProbs.push_back(std::move(inpMatrix));
+            }
+
+            // Sanity Check
             if ((newEmissionProbs.size() != oldEmissionProbs.size()) ||
                 (newEmissionProbs.size() != N))
                 throw std::runtime_error(
                     "Update Rule For Emission Probs Failed...");
-
             for (size_t n = 0; n < N; n++) {
                 size_t Cn = attributeRvDomains.at(n)->size();
-
-                // std::cout << "n = " << n << '\n';
-                // std::cout << "Old B_n = (" << oldEmissionProbs.at(n).size()
-                //           << ", " << oldEmissionProbs.at(n).at(0).size()
-                //           << ")\n";
-
-                // std::cout << "New B_n = (" << newEmissionProbs.at(n).size()
-                //           << ", " << newEmissionProbs.at(n).at(0).size()
-                //           << ")\n";
 
                 if (newEmissionProbs.at(n).size() !=
                         oldEmissionProbs.at(n).size() ||
@@ -455,7 +462,7 @@ int main(int, char *argv[]) {
             print2DArray(newTransitionMatrix, "New Transition Matrix");
 
             // TODO:
-            std::cout << "Not printing emission probs...";
+            std::cout << "Not printing emission probs...\n";
 
             std::cout << "------------------------\n\n";
 
@@ -475,14 +482,12 @@ int main(int, char *argv[]) {
             oldPriors = newPriors;
             oldTransitionMatrix = newTransitionMatrix;
             oldEmissionProbs = newEmissionProbs;
-            // ============= Create New Model (New Factors) =============
-            // Create new node factors
 
+            // ============= Create New Model (New Factors) =============
             // Priors
             pS1 = createPriorS1Factor(droughtStateDomain, oldPriors,
                                       droughtStateRvIDs.at(0), priorNoise);
             // Transition
-
             transitionFactors = createTransitionFactors(
                 droughtStateDomain, oldTransitionMatrix, droughtStateRvIDs);
 
@@ -535,6 +540,7 @@ void debugPrint(bool debug, std::string message) {
     if (debug) std::cout << message << '\n';
 }
 
+// ==================== Helper Functions ====================
 /**
  * @brief
  *  - Splits input string by given delimiter
@@ -605,123 +611,36 @@ void printVector(std::vector<T> inp, std::string_view vectorName) {
     std::cout << "]\n";
 }
 
-// TODO: CHANGE FLOATS TO INTS SINCE WE STAYING DISCRETE NOW
 /**
  * @brief
- *  - Reads in Drought Inidice Attributes.
- *  - Must be in Form (A^1, A^2, A^3, ....)
+ *  - Helper function used for randomly initialising params
  * @param
- *  -
+ *  - `vecSize`: Size of random output vector
+ *  - `mean`: Mean of normal distr (default = 0.0)
+ *  - `variance`: Variance of normal distr (default = 1.0)
  * @return
- *  - 2D Array (Number Attributes, Value At Each Time Step) → (N, T)
+ *  - Vector of postive random values of type `T`
  */
-std::vector<std::vector<float>> readCSV(std::string_view filePath,
-                                        bool hasHeader) {
-    std::ifstream fin;
-    std::string line;
-    std::vector<std::vector<float>> outp;
+template <typename T>
+std::vector<T> createRandomVector(const size_t vecSize, const T mean,
+                                  const T variance) {
+    // Ensure given mean & variance is arithmetic
+    if (!std::is_arithmetic<T>::value)
+        throw std::invalid_argument(
+            "Given type `T` is not one of [int, float, double]");
 
-    fin.open(filePath);
-    if (!fin) {
-        throw std::runtime_error("Given `filePath = " + std::string(filePath) +
-                                 "` could not be opened...");
+    std::vector<T> outp;
+    // This our random seed source
+    std::random_device rd{};
+    // Create RNG
+    std::mt19937 gen{rd()};
+    // Create normal distr object we can sample from
+    std::normal_distribution<T> randomNormal(mean, variance);
+
+    for (size_t i = 0; i < vecSize; i++) {
+        outp.push_back(std::abs(randomNormal(gen)));
     }
-
-    // Skip a Line If There Is a Header
-    if (hasHeader) std::getline(fin, line);
-
-    while (std::getline(fin, line)) {
-        std::vector<std::string> lineElements = splitByCharacter(line, ',');
-
-        std::vector<float> timeStep;
-        for (size_t i = 0; i < lineElements.size(); i++) {
-            float value = std::stof(lineElements.at(i));
-            timeStep.push_back(value);
-        }
-        outp.push_back(timeStep);
-    }
-
-    fin.close();
     return outp;
-}
-
-/**
- * @brief
- *  - Returns a vector of emdw RV IDs, incrementing from given starting
- * point
- * @param
- *  -
- *  - numNodes: Number of RV IDs to create
- *  - runningIdCount: Where to begin incrementing from (inclusive)
- * @return
- *  -
- */
-std::vector<emdw::RVIdType> createDiscreteRvIds(int numNodes,
-                                                uint &runningIdCount) {
-    std::vector<emdw::RVIdType> nodeIds;
-    for (int i = 0; i < numNodes; i++) {
-        nodeIds.push_back(runningIdCount);
-        runningIdCount += 1;
-    }
-    return nodeIds;
-}
-
-/**
- * @brief
- *  - Function to validate if RV ID generation was correct
- *  - Will simply cycle through each given data structure and see if they
- * are incrementing
- * @param
- *  -
- * @return
- *  - True (if Correct) or False (If Incorrect)
- */
-bool validateRvIds(const bool &debug,
-                   const std::vector<emdw::RVIdType> &droughtStateIds,
-                   const std::vector<std::vector<emdw::RVIdType>> &attributeIds,
-                   const std::vector<std::vector<float>> &observedAttributes) {
-    int lastItem = -1;
-
-    // Cylce Through hidden drought states
-    for (const emdw::RVIdType &droughtID : droughtStateIds) {
-        if (lastItem != droughtID - 1) return false;
-        lastItem += 1;
-    }
-
-    debugPrint(debug, "Hidden Drought RVs Are Correctly Initialised");
-
-    // ensure that `attributeIds` & `observedAttributes` are the same size
-    if ((observedAttributes.size() != attributeIds.size()) ||
-        (observedAttributes.at(0).size() != attributeIds.at(0).size())) {
-        return false;
-    }
-    // Cylce Through attribute RVs (Cycling the same as they were
-    // created...)
-    size_t T = attributeIds.size();
-    size_t N = attributeIds.at(0).size();
-    for (size_t t = 0; t < T; t++) {
-        for (size_t n = 0; n < N; n++) {
-            if (lastItem != attributeIds.at(t).at(n) - 1) return false;
-            lastItem += 1;
-        }
-    }
-    debugPrint(debug, "Attribute RVs Are Correctly Initialised");
-    return true;
-}
-
-/**
- * @brief
- *  - This will create a `rcptr` of a vector of ints
- *  - These ints then increment to max C
- *  - Example with C = 3:
- *      output: [1,2,3]
- */
-rcptr<std::vector<int>> createDiscreteRvDomain(size_t C) {
-    rcptr<std::vector<int>> domain(new std::vector<int>());
-    for (int i = 1; i <= C; ++i) {
-        domain->push_back(i);
-    }
-    return domain;
 }
 
 /**
@@ -836,6 +755,251 @@ void printDomainAttributeRVsDiscerete(
         std::cout << "]\n";
     }
     return;
+}
+
+/**
+ * @brief
+ *  - Prints a factor without the trailing 10 lines
+ *  - Also removes the "DiscreteTable_V0" at the beginning
+ * @param
+ *  - `factor`: Factor to be printed
+ *  - `factorName`: Factor's name
+ */
+void printFactor(const Factor &factor, std::string_view factorName) {
+    std::stringstream buffer;
+    std::streambuf *old_cout = std::cout.rdbuf(buffer.rdbuf());
+
+    std::cout << factor << '\n';
+    std::cout.rdbuf(old_cout);
+
+    std::string output = buffer.str();
+    std::istringstream iss(output);
+    std::string line;
+    std::vector<std::string> cleaned_lines;
+
+    // Process each line
+    while (std::getline(iss, line)) {
+        // Skip the DiscreteTable_V0 line and the trailing function lines
+        if (line.find("DiscreteTable_V0") == std::string::npos &&
+            line.find("DiscreteTable_") != 0) {
+            cleaned_lines.push_back(line);
+        }
+    }
+
+    // Print the cleaned output
+    std::cout << "--------- Printing " << factorName << " ---------\n";
+    for (const auto &clean_line : cleaned_lines) {
+        std::cout << clean_line << '\n';
+    }
+    std::cout << "----------------------------------------\n\n";
+}
+
+// ==================== File Handling ====================
+// TODO: CHANGE FLOATS TO INTS SINCE WE STAYING DISCRETE NOW
+/**
+ * @brief
+ *  - Reads in Drought Inidice Attributes.
+ *  - Must be in Form (A^1, A^2, A^3, ....)
+ * @param
+ *  -
+ * @return
+ *  - 2D Array (Number Attributes, Value At Each Time Step) → (N, T)
+ */
+std::vector<std::vector<float>> readCSV(std::string_view filePath,
+                                        bool hasHeader) {
+    std::ifstream fin;
+    std::string line;
+    std::vector<std::vector<float>> outp;
+
+    fin.open(filePath);
+    if (!fin) {
+        throw std::runtime_error("Given `filePath = " + std::string(filePath) +
+                                 "` could not be opened...");
+    }
+
+    // Skip a Line If There Is a Header
+    if (hasHeader) std::getline(fin, line);
+
+    while (std::getline(fin, line)) {
+        std::vector<std::string> lineElements = splitByCharacter(line, ',');
+
+        std::vector<float> timeStep;
+        for (size_t i = 0; i < lineElements.size(); i++) {
+            float value = std::stof(lineElements.at(i));
+            timeStep.push_back(value);
+        }
+        outp.push_back(timeStep);
+    }
+
+    fin.close();
+    return outp;
+}
+
+/**
+ * @brief
+ *  - Saves Model Output As A CSV
+ * @param
+ *  - `filePath`: Where to save CSV
+ *  - `cg`: Output of LBU
+ *  - `msgs`: Output of LBU
+ *  - `m`: Cardinality of S_t
+ *  - `droughtStateRvIDs`: IDs of all S_t
+ */
+void saveModelOutput(std::string_view filePath, ClusterGraph &cg,
+                     std::map<Idx2, rcptr<Factor>> &msgs, const int m,
+                     const std::vector<emdw::RVIdType> &droughtStateRvIDs) {
+    size_t T = droughtStateRvIDs.size();
+
+    std::ofstream fout;
+    fout.open(filePath);
+    if (!fout)
+        throw std::invalid_argument("Could Not Open: `" +
+                                    std::string(filePath) + '`');
+
+    fout << "St\n";
+
+    for (size_t t = 0; t < T; t++) {
+        rcptr<Factor> qSt =
+            queryLBU_CG(cg, msgs, {droughtStateRvIDs.at(t)})->normalize();
+
+        // Find Max Confidence of p(S_t)
+        double maxConf = 0.0;
+        int maxVal = -1;
+        for (int i = 1; i <= m; i++) {
+            double currConf = qSt->potentialAt({droughtStateRvIDs.at(t)}, {i});
+            if (currConf > maxConf) {
+                maxConf = currConf;
+                maxVal = i;
+            }
+        }
+
+        // Add Max Value
+        if (maxVal == -1)
+            throw std::runtime_error(
+                "Extracting Of Drought States Went Wrong...");
+
+        // Populate CSV with value
+        fout << maxVal << '\n';
+    }
+    fout.close();
+}
+
+// ==================== Creating Params ====================
+/**
+ * @brief
+ *  - Used for initialisation of prior parameters [π_1, π_2, ..., π_m]
+ * @param
+ *  - `m`: Cardinality of S_t
+ *  - `mean`: Mean of normal distr (default = 0.0)
+ *  - `variance`: Variance of normal distr (default = 1.0)
+ * @return
+ *  - Vector of random values of type `double`
+ */
+std::vector<double> createRandomPriors(const int m, const double mean,
+                                       const double variance) {
+    return createRandomVector(m, mean, variance);
+}
+
+/**
+ * @brief
+ *  - Used for initialisation of transition params P^1
+ * @param
+ *  - `m`: Cardinality of S_t
+ *  - `mean`: Mean of normal distr (default = 0.0)
+ *  - `variance`: Variance of normal distr (default = 1.0)
+ * @return
+ *  - 2D Array (mxm) of random values of type `double`
+ */
+std::vector<std::vector<double>> createRandomTransitionParams(
+    const int m, const double mean, const double variance) {
+    std::vector<std::vector<double>> outp;
+
+    for (size_t i = 0; i < m; i++) {
+        outp.push_back(createRandomVector(m, mean, variance));
+    }
+    return outp;
+}
+
+/**
+ * @brief
+ *  - Creates parameters for attribute potentials randomly according to
+ * normal distribution
+ *  - See tablet for DS explanation
+ * @param
+ *  - `attributeRvDomains`: Domains of Attribute RVs (A^n_t),
+ *  - `m`: Number of values hidden drought state can take on
+ *  - `mean` = 0.0: Mean of normal distribution
+ *  - `variance` = 1.0: Variance of normal distribution
+ * @return
+ *  - Returns Parameters
+ */
+std::vector<std::vector<std::vector<double>>> createEmissionParamsDiscrete(
+    const std::vector<rcptr<std::vector<int>>> &attributeRvDomains,
+    const size_t m, const double variance, const double mean) {
+    std::vector<std::vector<std::vector<double>>> emissionProbs;
+
+    size_t N = attributeRvDomains.size();
+
+    // This our random seed source
+    std::random_device rd{};
+    // Create RNG
+    std::mt19937 gen{rd()};
+    // Create normal distr object we can sample from
+    std::normal_distribution<double> randomNormal(mean, std::sqrt(variance));
+    // Create Bn
+    for (int n = 0; n < N; n++) {
+        size_t Cn = attributeRvDomains.at(n)->size();
+
+        // Prepopulate with 0s, then cylce through each one with reference
+        //  to alter them to random numbers
+        std::vector<std::vector<double>> Bn(Cn, std::vector<double>(m, 0.0));
+        for (auto &row : Bn) {
+            for (auto &elem : row) {
+                elem = std::abs(randomNormal(gen));
+            }
+        }
+
+        // Now add this matrix to our vector of matrices
+        emissionProbs.push_back(Bn);
+    }
+    return emissionProbs;
+}
+
+// ==================== Model Setup ====================
+/**
+ * @brief
+ *  - Returns a vector of emdw RV IDs, incrementing from given starting
+ * point
+ * @param
+ *  -
+ *  - numNodes: Number of RV IDs to create
+ *  - runningIdCount: Where to begin incrementing from (inclusive)
+ * @return
+ *  -
+ */
+std::vector<emdw::RVIdType> createDiscreteRvIds(int numNodes,
+                                                uint &runningIdCount) {
+    std::vector<emdw::RVIdType> nodeIds;
+    for (int i = 0; i < numNodes; i++) {
+        nodeIds.push_back(runningIdCount);
+        runningIdCount += 1;
+    }
+    return nodeIds;
+}
+
+/**
+ * @brief
+ *  - This will create a `rcptr` of a vector of ints
+ *  - These ints then increment to max C
+ *  - Example with C = 3:
+ *      output: [1,2,3]
+ */
+rcptr<std::vector<int>> createDiscreteRvDomain(size_t C) {
+    rcptr<std::vector<int>> domain(new std::vector<int>());
+    for (int i = 1; i <= C; ++i) {
+        domain->push_back(i);
+    }
+    return domain;
 }
 
 /**
@@ -960,88 +1124,6 @@ std::vector<rcptr<Factor>> createTransitionFactors(
 
 /**
  * @brief
- *  - Prints a factor without the trailing 10 lines
- *  - Also removes the "DiscreteTable_V0" at the beginning
- * @param
- *  - `factor`: Factor to be printed
- *  - `factorName`: Factor's name
- */
-void printFactor(const Factor &factor, std::string_view factorName) {
-    std::stringstream buffer;
-    std::streambuf *old_cout = std::cout.rdbuf(buffer.rdbuf());
-
-    std::cout << factor << '\n';
-    std::cout.rdbuf(old_cout);
-
-    std::string output = buffer.str();
-    std::istringstream iss(output);
-    std::string line;
-    std::vector<std::string> cleaned_lines;
-
-    // Process each line
-    while (std::getline(iss, line)) {
-        // Skip the DiscreteTable_V0 line and the trailing function lines
-        if (line.find("DiscreteTable_V0") == std::string::npos &&
-            line.find("DiscreteTable_") != 0) {
-            cleaned_lines.push_back(line);
-        }
-    }
-
-    // Print the cleaned output
-    std::cout << "--------- Printing " << factorName << " ---------\n";
-    for (const auto &clean_line : cleaned_lines) {
-        std::cout << clean_line << '\n';
-    }
-    std::cout << "----------------------------------------\n\n";
-}
-
-/**
- * @brief
- *  - Creates parameters for attribute potentials randomly according to
- * normal distribution
- *  - See tablet for DS explanation
- * @param
- *  - `attributeRvDomains`: Domains of Attribute RVs (A^n_t),
- *  - `m`: Number of values hidden drought state can take on
- *  - `mean` = 0.0: Mean of normal distribution
- *  - `variance` = 1.0: Variance of normal distribution
- * @return
- *  - Returns Parameters
- */
-std::vector<std::vector<std::vector<double>>> createEmissionParamsDiscrete(
-    const std::vector<rcptr<std::vector<int>>> &attributeRvDomains,
-    const size_t m, const double variance, const double mean) {
-    std::vector<std::vector<std::vector<double>>> emissionProbs;
-
-    size_t N = attributeRvDomains.size();
-
-    // This our random seed source
-    std::random_device rd{};
-    // Create RNG
-    std::mt19937 gen{rd()};
-    // Create normal distr object we can sample from
-    std::normal_distribution<double> randomNormal(mean, std::sqrt(variance));
-    // Create Bn
-    for (int n = 0; n < N; n++) {
-        size_t Cn = attributeRvDomains.at(n)->size();
-
-        // Prepopulate with 0s, then cylce through each one with reference
-        //  to alter them to random numbers
-        std::vector<std::vector<double>> Bn(Cn, std::vector<double>(m, 0.0));
-        for (auto &row : Bn) {
-            for (auto &elem : row) {
-                elem = std::abs(randomNormal(gen));
-            }
-        }
-
-        // Now add this matrix to our vector of matrices
-        emissionProbs.push_back(Bn);
-    }
-    return emissionProbs;
-}
-
-/**
- * @brief
  *  - See tablet notes for explanation
  * @param
  *  - `droughtStateRvIDs`: IDs Associated With S_t RVs
@@ -1133,6 +1215,52 @@ std::vector<std::vector<rcptr<Factor>>> createEmissionFactorsDiscrete(
 
     return emissionFactors;
 }
+
+// ==================== Validation Functions ====================
+/**
+ * @brief
+ *  - Function to validate if RV ID generation was correct
+ *  - Will simply cycle through each given data structure and see if they
+ * are incrementing
+ * @param
+ *  -
+ * @return
+ *  - True (if Correct) or False (If Incorrect)
+ */
+bool validateRvIds(const bool &debug,
+                   const std::vector<emdw::RVIdType> &droughtStateIds,
+                   const std::vector<std::vector<emdw::RVIdType>> &attributeIds,
+                   const std::vector<std::vector<float>> &observedAttributes) {
+    int lastItem = -1;
+
+    // Cylce Through hidden drought states
+    for (const emdw::RVIdType &droughtID : droughtStateIds) {
+        if (lastItem != droughtID - 1) return false;
+        lastItem += 1;
+    }
+
+    debugPrint(debug, "Hidden Drought RVs Are Correctly Initialised");
+
+    // ensure that `attributeIds` & `observedAttributes` are the same size
+    if ((observedAttributes.size() != attributeIds.size()) ||
+        (observedAttributes.at(0).size() != attributeIds.at(0).size())) {
+        return false;
+    }
+    // Cylce Through attribute RVs (Cycling the same as they were
+    // created...)
+    size_t T = attributeIds.size();
+    size_t N = attributeIds.at(0).size();
+    for (size_t t = 0; t < T; t++) {
+        for (size_t n = 0; n < N; n++) {
+            if (lastItem != attributeIds.at(t).at(n) - 1) return false;
+            lastItem += 1;
+        }
+    }
+    debugPrint(debug, "Attribute RVs Are Correctly Initialised");
+    return true;
+}
+
+// ==================== Model Inference ====================
 
 /**
  * @brief
@@ -1237,41 +1365,8 @@ performLBU_LTRIP_discrete(
     return std::make_pair(cg, msgs);
 }
 
-void saveModelOutput(std::string_view filePath, ClusterGraph &cg,
-                     std::map<Idx2, rcptr<Factor>> &msgs, const int m,
-                     const std::vector<emdw::RVIdType> &droughtStateRvIDs) {
-    size_t T = droughtStateRvIDs.size();
+// // TODO: CHANGE ALL `DEBUG` TO `debug`
+// void performModelSelection(const bool debug, const size_t emIters,
+//                            std::string_view inpPathCSV,
 
-    std::ofstream fout;
-    fout.open(filePath);
-    if (!fout)
-        throw std::invalid_argument("Could Not Open: `" +
-                                    std::string(filePath) + '`');
-
-    fout << "St\n";
-
-    for (size_t t = 0; t < T; t++) {
-        rcptr<Factor> qSt =
-            queryLBU_CG(cg, msgs, {droughtStateRvIDs.at(t)})->normalize();
-
-        // Find Max Confidence of p(S_t)
-        double maxConf = 0.0;
-        int maxVal = -1;
-        for (int i = 1; i <= m; i++) {
-            double currConf = qSt->potentialAt({droughtStateRvIDs.at(t)}, {i});
-            if (currConf > maxConf) {
-                maxConf = currConf;
-                maxVal = i;
-            }
-        }
-
-        // Add Max Value
-        if (maxVal == -1)
-            throw std::runtime_error(
-                "Extracting Of Drought States Went Wrong...");
-
-        // Populate CSV with value
-        fout << maxVal << '\n';
-    }
-    fout.close();
-}
+// ) {}
