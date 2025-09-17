@@ -6,8 +6,6 @@
 #include "clustergraph.hpp"
 #include "discretetable.hpp"
 #include "emdw.hpp"
-// TODO: ASK ABOUT THIS
-#include "lbu2_cg.hpp"  // ????
 #include "lbu_cg.hpp"
 #include "messagequeue.hpp"
 
@@ -16,9 +14,11 @@
 #include <cctype>    // toupper
 #include <iostream>  // cout, endl, flush, cin, cerr
 #include <limits>    // Not Sure
+#include <limits>    // Get Minimum double
 #include <map>       // Sparse Probabilities for Factor Creation
 #include <memory>    // Not Sure
 #include <string>    // string
+#include <tuple>     // Packaging \Theta for function output
 #include <vector>    // Everything
 
 // Not using this but is being used by initialisation code
@@ -108,11 +108,17 @@ performLBU_LTRIP_discrete(
     const std::vector<emdw::RVIdType> &droughtStateRvIDs,
     const std::vector<std::vector<emdw::RVIdType>> &attributeRvIds,
     const std::vector<std::vector<float>> &observedAttributes);
-void runModel(const size_t m,
-              const std::vector<std::vector<float>> &observedAttributes,
-              std::string_view outputPathCSV, const size_t maxIters = 10,
-              const bool debug = true);
+std::tuple<std::vector<double>, std::vector<std::vector<double>>,
+           std::vector<std::vector<std::vector<double>>>>
+runModel(const size_t m,
+         const std::vector<std::vector<float>> &observedAttributes,
+         const size_t maxIters, std::string_view outputPathCSV,
+         const bool debug);
 
+void modelSelection(const std::vector<std::vector<float>> &observedAttributes,
+                    const std::pair<size_t, size_t> &mRange,
+                    const size_t maxEMIters, const size_t numRestartIters,
+                    std::string_view outputPathCSV, const bool debug);
 // ==================== Main Function ====================
 int main(int, char *argv[]) {
     // NOTE: this activates logging and unit tests
@@ -152,7 +158,13 @@ int main(int, char *argv[]) {
         // Print Attributes
         if (DEBUG) print2DArray(observedAttributes);
 
-        runModel(m, observedAttributes, "../../../data/synthetic/output.csv");
+        modelSelection(observedAttributes, std::make_pair(3, 10), maxIters, 10,
+                       "../../../data/synthetic/modelSelection.csv", DEBUG);
+
+        return 0;
+
+        runModel(m, observedAttributes, maxIters,
+                 "../../../data/synthetic/output.csv", DEBUG);
 
         return 0;  // tell the world that all is fine
     }  // try
@@ -955,29 +967,6 @@ performLBU_LTRIP_discrete(
         }
     }
 
-    // TODO: Ask about this `->getVars()` method
-    // for (size_t t = 0; t < T - 1; t++) {
-    //     factorsVector.push_back(uniqptr<Factor>(
-    //         transitionFactors.at(t)->copy(transitionFactors.at(t)->getVars())));
-    // }
-
-    // This `getVars()` Version is Fine? TODO: ASK ABOUT THIS
-    // for (size_t t = 0; t < T; t++) {
-    //     for (size_t n = 0; n < N; n++) {
-    //         factorsVector.push_back(
-    //             uniqptr<Factor>(emissionFactors.at(t).at(n)->copy(
-    //                 emissionFactors.at(t).at(n)->getVars())));
-
-    //         std::cout << "Inserted p(A^" << n + 1 << '_' << t + 1 << " |
-    //         S_"
-    //                   << t + 1 << ")\n";
-
-    //         std::cout << emissionFactors.at(t).at(n)->getVars() <<
-    //         std::endl; std::cout << attributeRvIds.at(t).at(n) << ", "
-    //                   << droughtStateRvIDs.at(t) << std::endl;
-    //     }
-    // }
-
     // ================ Assign All Observed Variables ================
     // The result is a `std::map` where the key is the ID of the observed RV
     //  while the value is the observed data
@@ -997,7 +986,7 @@ performLBU_LTRIP_discrete(
     /* std::cout << cg << std::endl; */
 
     // export the graph to graphviz .dot format
-    // cg.exportToGraphViz("hamming74");
+    // cg.exportToGraphViz("jtree");
 
     // Now Calibrate the graph
     std::map<Idx2, rcptr<Factor>> msgs;
@@ -1011,10 +1000,12 @@ performLBU_LTRIP_discrete(
     return std::make_pair(cg, msgs);
 }
 
-void runModel(const size_t m,
-              const std::vector<std::vector<float>> &observedAttributes,
-              std::string_view outputPathCSV, const size_t maxIters,
-              const bool debug) {
+std::tuple<std::vector<double>, std::vector<std::vector<double>>,
+           std::vector<std::vector<std::vector<double>>>>
+runModel(const size_t m,
+         const std::vector<std::vector<float>> &observedAttributes,
+         const size_t maxIters, std::string_view outputPathCSV,
+         const bool debug) {
     //*********************************************************
     // Specify Parameters
     // *********************************************************
@@ -1330,53 +1321,24 @@ void runModel(const size_t m,
             std::cout << "------------------------\n\n";
         }
 
+        // ============= Update Old Params For Next Loop
+        oldPriors = newPriors;
+        oldTransitionMatrix = newTransitionMatrix;
+        oldEmissionProbs = newEmissionProbs;
+
         // ============= Iterate Loop & Exit Condition =============
         numIter += 1;
         if (numIter > maxIters) {
             // End Timer
             endEM = std::chrono::high_resolution_clock::now();
 
-            debugPrint(debug, "Saving Output");
-
             // This is the condition for not saving output (AIC, BIC, Log L)
-            if (outputPathCSV == "None") {
-                size_t freeParams = m + m * m;
-                for (size_t n = 0; n < N; n++) {
-                    size_t Cn = attributeRvDomains.at(n)->size();
-                    freeParams += Cn * m;
-                }
-                size_t numDataPoints = T;
-
-                // ============= Naive Way To Get Log Likelihood =============
-                // Joint distr
-                rcptr<Factor> jointDistr = pS1->absorb(transitionFactors.at(0));
-
-                for (size_t t = 1; t < transitionFactors.size(); t++) {
-                    jointDistr->absorb(transitionFactors.at(t));
-                }
-                for (size_t n = 0; n < N; n++) {
-                    for (size_t t = 0; t < T; t++) {
-                        jointDistr->absorb(emissionFactors.at(t).at(n));
-                    }
-                }
-
-                // Marginalise out all S_t ie. Only keep attribute RVs
-                std::vector<emdw::RVIdType> attributeRVIdsFlat;
-
-                // for (size_t t = 0; t < T; t++) {
-                //     jointDistr->marginalize()
-                // }
-            } else {
+            if (outputPathCSV != "None") {
+                debugPrint(debug, "Saving Output");
                 saveModelOutput(outputPathCSV, cg, msgs, m, droughtStateRvIDs);
             }
-
             break;
         }
-
-        // ============= Update Old Params For Next Loop
-        oldPriors = newPriors;
-        oldTransitionMatrix = newTransitionMatrix;
-        oldEmissionProbs = newEmissionProbs;
 
         // ============= Create New Model (New Factors) =============
         // Priors
@@ -1402,6 +1364,135 @@ void runModel(const size_t m,
               << elapsedEM.count() << " seconds\n\n";
 
     debugPrint(debug, "✓ Success");
+
+    // Now need to return the params
+    //  - This will not be used when doing final inference with a set `m`
+    //  - However, for model selection, we need to calculate likelihood which
+    //      simply requires the final parameters
+    return {oldPriors, oldTransitionMatrix, oldEmissionProbs};
 }
 
-void selectm() {}
+void modelSelection(const std::vector<std::vector<float>> &observedAttributes,
+                    const std::pair<size_t, size_t> &mRange,
+                    const size_t maxEMIters, const size_t numRestartIters,
+                    std::string_view outputPathCSV, const bool debug) {
+    size_t T = observedAttributes.size();
+    size_t N = observedAttributes.at(0).size();
+
+    std::vector<size_t> CnVals(N, 0);
+
+    // Holding results in 2d array where each row is {loglik, AIC, BIC}. And of
+    //  course, we have `mRange.second - mRange.first` of these rows. So size of
+    //  array is (mRange.second - mRange.first, 3)
+    std::vector<std::vector<double>> results;
+
+    for (size_t m = mRange.first; m <= mRange.second; m++) {
+        // ==================== Many Restarts ====================
+        double maxLogLik = -std::numeric_limits<double>::max();
+
+        for (size_t r = 0; r < numRestartIters; r++) {
+            debugPrint(debug, "=============== m = " + std::to_string(m) +
+                                  " | r =" + std::to_string(r + 1) +
+                                  " ===============");
+            auto [priors, transitionProbs, emissionProbs] =
+                runModel(m, observedAttributes, maxEMIters, "None", false);
+
+            // ==================== Calculate Log-Likelihood
+            // ==================== p(\vec{A}_t | S_t = i)
+            //  - Working in log-space, and will simply exec exp(log(p(...)))
+            //      if I want to use it
+            std::vector<std::vector<double>> log_pAgSi(
+                T, std::vector<double>(m, 0.0));
+            for (size_t t = 0; t < T; t++) {
+                for (size_t i = 0; i < m; i++) {
+                    for (size_t n = 0; n < N; n++) {
+                        // Here we populating CnVals but only on very first iter
+                        if (m == mRange.first && r == 0) {
+                            CnVals[n] = emissionProbs.at(n).size();
+                        }
+
+                        // TODO: If MOVING FROM DISCRETE THEN CHANGE THIS
+                        int obs = observedAttributes.at(t).at(n);
+                        double p = emissionProbs.at(n).at(obs - 1).at(i);
+                        log_pAgSi[t][i] += std::log(p);
+                    }
+                }
+            }
+
+            // Forward Algorithm With Scaling
+            std::vector<std::vector<double>> alpha(T,
+                                                   std::vector<double>(m, 0.0));
+            std::vector<double> c(T, 0.0);  // scaling constants
+
+            // compute alpha_1
+            for (size_t i = 0; i < m; i++) {
+                alpha[0][i] = priors.at(i) * std::exp(log_pAgSi[0][i]);
+                c[0] += alpha[0][i];
+            }
+            // normalize
+            for (size_t i = 0; i < m; i++) alpha[0][i] /= c[0];
+
+            // recursion
+            for (size_t t = 1; t < T; t++) {
+                for (size_t j = 0; j < m; j++) {
+                    double sum_prev = 0.0;
+                    for (size_t i = 0; i < m; i++) {
+                        sum_prev +=
+                            alpha.at(t - 1).at(i) * transitionProbs.at(i).at(j);
+                    }
+                    alpha[t][j] = sum_prev * exp(log_pAgSi.at(t).at(j));
+                }
+                // scale
+                for (size_t j = 0; j < m; j++) c[t] += alpha.at(t).at(j);
+                for (size_t j = 0; j < m; j++) alpha[t][j] /= c.at(t);
+            }
+
+            // log-likelihood = - sum(log(c[t]))
+            double logLik = 0.0;
+            for (size_t t = 0; t < T; t++) logLik += std::log(c.at(t));
+
+            debugPrint(debug, "Log-Likelihood = " + std::to_string(logLik));
+            if (logLik > maxLogLik) {
+                maxLogLik = logLik;
+                debugPrint(debug, "Max Log Likelihood Updated");
+            }
+            debugPrint(debug, "\n");
+        }
+
+        // Number of free parameters
+        size_t tmpSum = 0.0;
+        for (size_t n = 0; n < N; n++) {
+            tmpSum += CnVals.at(n) - 1;
+        }
+        size_t p = m * m - 1 + m * tmpSum;
+
+        // Number of Data Points
+        size_t k = T;
+
+        double AIC = -2 * maxLogLik + 2 * p;
+        double BIC = -2 * maxLogLik + p * std::log(k);
+
+        // Save Results
+        results.push_back({maxLogLik, AIC, BIC});
+    }
+
+    // Now to save the results :)
+    std::ofstream fout;
+    fout.open(outputPathCSV);
+    if (!fout)
+        throw std::invalid_argument("Given `filePath` could not be opened: " +
+                                    std::string(outputPathCSV));
+
+    debugPrint(debug, "Saving Output...");
+    // Heading
+    fout << "m,log_lik,aic,bic\n";
+    for (size_t i = 0; i < results.size(); i++) {
+        fout << std::to_string(mRange.first + i) << ','
+             << std::to_string(results.at(i).at(0)) << ','
+             << std::to_string(results.at(i).at(1)) << ','
+             << std::to_string(results.at(i).at(2)) << '\n';
+    }
+    fout.close();
+    debugPrint(debug, "✓ Success");
+    return;
+}

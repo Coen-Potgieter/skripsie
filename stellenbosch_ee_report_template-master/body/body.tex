@@ -173,50 +173,163 @@ things before figure
 
 \section{Determining $m$}
 
-Okay some questions:
+
+We are using AIC, BIC and maximum log likelihood to do this. Here are the formulas:
+\[
+    \begin{aligned}
+        AIC &= -2 \cdot \text{log} \; L(\Theta) + 2p \\
+        BIC &= -2 \cdot \text{log} \; L(\Theta) + p \cdot \text{log} \; k
+    \end{aligned}
+\]
+Where:
+\begin{itemize}
+    \item $L(\Theta) \equiv$ the maximized value of the likelihood function for the estimated model
+    \item $p \equiv$ the number of free parameters, 
+    \item $k \equiv$ the number of data points. 
+\end{itemize}
+
+
+The idea is that we are going to sweep $m$, this means creating many models with different values of $m$, and choose the model that minimizes both AIC \& BIC, whilst maximising $L(\Theta)$. Here is a more comprehensive criteria for choosing a particular $m$:
+
 \begin{enumerate}
-    \item I have one sequence of $T$ observations with $N$ variables being observed at each $t$ step. Would my $k$ then be $T \times N$ or would it just be $T$?
-    \item Define, algebraically, exactly what my $L$ should be that I need to calculate
+    \item Primary: lowest BIC (preferred if you want parsimony, BIC penalizes complexity strongly).
+    \item Secondary: lowest AIC.
+    \item Also look at the log-likelihood curve: if $\text{log} \; L(\Theta)$ improves only marginally as $m$ increases, choose the simpler model (elbow rule).
 \end{enumerate}
 
-Okay progress update:
-I have built the model. I have used synthetic data for model development. We have:
+But okay, lets see what the particular values are for our BIC \& AIC calculations
 
 
-Note: Our attribute RVs are discrete. 
+\subsection{What is $k$}
+We will first look at $k \equiv$ the number of data points: Not sure, can either see each observation as a vector, therefore we have $T$, or we can see each $a_t^{(n)}$ as an observation, and in that case we would have $T \times N$ observations.
 
-Model works with a set $m$ but the paper estimates this value using maximized log-likelihood, AIC and BIC
-How do i do this? Is it just creating the model for various values of $m$ and choosing the one that returns the lowest AIC, BIC and largest log-likelihood?
+\subsection{What is $p$}
+- Next we look at $p \equiv$ the number of free parameters. Look more into this. See Occons Razor (A principled method to model selection and how BIC is an approximation of this), in the, use $m-1$, so we will have:
 
-
-
-
- Consequently, in analyzing the drought indices, the number of latent states m was the first quantity we wanted to extract. We considered a simple procedure based on information criteria, which is a usual tool for model selection. The model with the optimal number of latent states was expected to best explain the data with a minimum number of free parameters. We used the  given as follows:
-\[
-    AIC = -2 \hspace{0.1cm} \text{log} L + 2p
-\]
 
 \[
-    BIC = -2 \; \text{log}L + p \text{log} k
+    \begin{aligned}
+        p &= (m-1) + m(m-1) + \sum\limits_{n=1}^N m(C_n - 1) \\ 
+        &= m^2 - 1 +m\sum\limits_{n=1}^N (C_n - 1)
+    \end{aligned}
 \]
 
-Where $L \equiv$ the maximized value of the likelihood function for the estimated model
 
-$p \equiv$ the number of free parameters, 
+\subsection{How To Get $\ell(\Theta)$}
 
-$k \equiv$ the number of data points. 
+This is the real kicker...
+\vspace{1cm}
 
+Of course the likelihood is the probability our data is observed, this means finding:
+\[
+    \begin{aligned}
+        \ell(\Theta) &= p(A_1^{(1)} = a_1^{(1)}, A_1^{(2)} = a_1^{(2)}, \dots, A_T^{(N)} = a_T^{(N)} \mid \Theta) \\ 
+        &= p(A_{1:T}^\text{obs} \mid \Theta)
+    \end{aligned}
+\]
 
-\subsection{How To Get $\text{log} \; \ell$}
+Note: $\text{Observed Data} = (a_1^{(1)}, a_1^{(2)}, \dots, a_T^{(N)})$
 
-I am not using the Forward Backward algorithm, I am using the EM algorithm that means the factors I have readily available are:
+To do this, we will use the Forward Algorithm (also note that have this (obs) superset makes things very verbose and will be omitted from here on out):
+
+We begin by defining the factor $p(\vec{A}_t \mid S_t = i)$
+\begin{itemize}
+    \item Recall, $\vec{A}_t = \{A_t^{(1)}, A_t^{(2)}, \dots A_t^{(N)} \}$
+    \item Because of our model and the independent properties and things, we know that:
+        \[
+            \begin{aligned}
+                p(\vec{A}_t \mid S_t = i) &= p(A_t^{(1)}, A_t^{(2)}, \dots, A_t^{(N)} \mid S_t = i) \\
+                &= p(A_t^{(1)} \mid S_t = i) \cdot p(A_t^{(2)} \mid S_t = i) \dots p(A_t^{(N)} \mid S_t = i) \\ 
+                &= \prod\limits_{n=1}^N p(A_t^{(n)} \mid S_t = i) \\
+                &= \prod\limits_{n=1}^N e_i^{(n)}(a_t^{(n)})
+            \end{aligned}
+        \]
+\end{itemize}
+
+Lets now look at the Forward Algorithm
 
 \begin{itemize}
-\item $q(\mathcal{H}) = p(\vec{S}_{1:T} \mid A_{1:T}, \Theta)$
+    \item We first define
+\[
+    \begin{aligned}
+        \alpha_t(i) &= p(S_t = i, A_{1:t}^{\text{obs}} \mid \Theta) \\
+        &= p(S_t = i, \vec{A}_1, \vec{A}_2, \dots, \vec{A}_t \mid \Theta)
+    \end{aligned}
+\]
+    \item We begin at $t=1$:
+\[
+    \begin{aligned}
+        \alpha_1(i) &= p(S_1 = i, A_{1:1}^{\text{obs}} \mid \Theta) \\
+        &= p(S_1 = i, \vec{A}_1 \mid \Theta) \\
+        &= p(S_1) \cdot p(\vec{A}_1 \mid S_1 = i, \Theta) \\
+    \end{aligned}
+\]
+
+    \item Then to move to the next time step: 
+\[
+    \alpha_{t+1}(j) &= (\sum\limits_{i=1}^m \alpha_t(i) \cdot p_{i,j}) \cdot p(\vec{A}_{t+1} \mid S_{t+1} = j, \Theta)
+\]
+    \item Thus, by the end we will have $\alpha_T(i) = p(A_{1:T}, S_T = i \mid \Theta)$
+    \item Then finally we can obtain our likelihood by marginalising out $S_T$
+        \[
+            \begin{aligned}
+                \sum\limits_{i=1}^m \alpha_T(i) &= \sum\limits_{S_t} p(A_{1:t}, S_t \mid \Theta) \\ 
+                &= p(A_{1:t} \mid \Theta) \\ 
+                &= \ell(\Theta)
+            \end{aligned}
+        \]
+\end{itemize}
+
+Okay, lets regroup. Just so we fully get it. This is done after our model has been fitted and we already have our final $\Theta$. There is also no factors going on here. Our parameters ($\Theta$) are the probabilities in themselves. So when we observed our data $p(A_t^{(n)} = a_t^{(n)} | S_t = i)$ we are in essence choosing the value $b^{(n)}_i(a_t^{(n)})$ (Note, these $b$'s will have to change to $e$ or something...). And thus we have actual values we are playing with, thus pure math, not factors.
+
+
+
+
+
+
+
+
+
+
+
+Reminder: These are factors we have available:
+\begin{itemize}
+\item $q(\mathcal{H}) = p(\vec{S}_{1:T} \mid A_{1:T}^{\text{obs}}, \Theta)$
 \item $p(S_1)$
 \item $p(S_{t+1} \mid S_t)$
 \item $p(A^{(n)}_t \mid S_t)$
 \end{itemize}
+
+We want $\text{log} \; \ell(\Theta) = \text{log} \; p(A_{1:T}^{\text{obs}} \mid \Theta)$
+
+Math to get there:
+\begin{enumerate}
+    \item Start With Each $p(A_t^{(n)} \mid S_t)$
+    \item For Each $A_t^{(n)}$
+        \begin{enumerate}
+            \item Observe data point $a_t^{(n)}$ to get: $p(A_t^{(n)} = a^{(n)}_t \mid S_t)$
+            \item Get $p(A_t^{(n)} = a^{(n)}_t)$ understanding that: 
+                \[
+p(A_t^{(n)} = a^{(n)}_t) = \sum\limits_{S_t} p(A_t^{(n)} = a^{(n)}_t \mid S_t) \cdot p(S_t)
+                \]
+                This $p(S_t)$ is our $q(\mathcal{H})$
+        \end{enumerate}
+    \item Then of course, we multiply these to get 
+        \[
+p(A_{1:T}^\text{obs}) = \prod\limits_{n=1}^N\prod\limits_{t=1}^T p(A_t^{(n)} = a^{(n)}_t)
+        \]
+    \item These will likely underflow so we insert log now: 
+        \[
+            \text{log} \; \ell(\Theta) = \text{log} \; p(A_{1:T}^\text{obs}) = \sum\limits_{n=1}^N\sum\limits_{t=1}^T \text{log} \; p(A_t^{(n)} = a^{(n)}_t)
+        \]
+\end{enumerate}
+
+Thoughts?
+
+
+
+
+
 
 If I can still use the forward equations, let me know. Otherwise I need to calculate the full joint distr and marginalise out?
 
@@ -273,7 +386,94 @@ Okay Ill stop faffing. Forward-Backward is new, I didnt want to waste a time sin
 \end{enumerate}
 
 
+\section{Forward-Backward}
 
 
 
+\begin{itemize}
+    \item Initial: $\pi_i = P(S_1=i)$.
+    \item Transition: $a_{ij} = P(S_{t+1}=j \mid S_t=i)$.
+    \item Emission Probabilities: $b_i^{(n)}(j) = p(A_t^{(n)}=j \mid S_t=i)$.
+\end{itemize}
+
+
+\subsection{Define Forward Values}
+
+\[
+    \alpha_t(i) = p(S_t = i, A_{1:t}^{\text{obs}} \mid \Theta)
+\]
+
+\subsection{Define Backward Values}
+
+\[
+    \beta_t(i) = p( A_{t+1:T}^{\text{obs}} \mid S_t = i, \Theta)
+\]
+
+
+\subsection{Updates}
+
+First Define:
+\[
+    \gamma _t(i) = p(S_t = i \mid A_{1:T}^{\text{obs}}, \Theta) = \frac {p(S_t=i, A_{1:T}^{\text{obs}} \mid \Theta )}{p(A_{1:T}^{\text{obs}} \mid \theta )} = \frac{\alpha_t(i) \beta_t(i)}{\sum\limits_{k=1}^m\alpha_t(k) \beta_t(k)}
+\]
+
+Node marginals:
+
+\[
+  \gamma_t(i) = P(S_t=i\mid A_{1:T},\Theta) = \frac{\alpha_t(i)\beta_t(i)}{\sum_{k=1}^m \alpha_t(k)\beta_t(k)}.
+\]
+
+Pairwise marginals:
+
+\[
+    \xi_t(i,j) = P(S_t=i, S_{t+1}=j \mid A_{1:T},\Theta) = \frac{\alpha_t(i) a_{ij} P(A_{t+1}\mid S_{t+1}=j) \beta_{t+1}(j)}{\sum\limits_{p=1}^m \sum\limits_{q=1}^m \alpha_t(p) a_{pq} P(A_{t+1}\mid S_{t+1}=q)\beta_{t+1}(q)}.
+
+\]
+
+\newpage
+
+1. Forward $\alpha_t(i)=P(A_{1:t},S_t=i \mid \theta)$ and backward $\beta_t(i)=P(A_{t+1:T}\mid S_t=i,\theta)$. Use scaling or log-space.
+2. Responsibilities:
+
+   $$
+   \gamma_t(i) \equiv P(S_t=i\mid A_{1:T},\theta)=\frac{\alpha_t(i)\,\beta_t(i)}{\sum_{\ell}\alpha_t(\ell)\beta_t(\ell)}.
+   $$
+3. Pairwise responsibilities:
+
+   $$
+   \xi_t(i,j) \equiv P(S_t=i,S_{t+1}=j\mid A_{1:T},\theta)=
+   \frac{\alpha_t(i)\,a_{ij}\,P(A_{t+1}\mid S_{t+1}=j)\,\beta_{t+1}(j)}{\sum_{p,q}\alpha_t(p)\,a_{pq}\,P(A_{t+1}\mid S_{t+1}=q)\,\beta_{t+1}(q)}.
+   $$
+
+For multiple independent sequences $n=1,\dots,N$, compute $\gamma_t^{(n)}$ and $\xi_t^{(n)}$ per sequence and sum where needed.
+
+# “Baum’s auxiliary function” = EM $Q$-function
+
+$$
+Q(\theta\mid\theta^{\text{old}}) \;=\; \mathbb{E}_{S_{1:T}\mid A_{1:T},\theta^{\text{old}}}\!\left[\log P(S_{1:T},A_{1:T}\mid \theta)\right].
+$$
+
+Expanding the complete-data log-likelihood under the DNBC factorization gives three decoupled blocks (initial, transition, emission). Maximizing $Q$ with simplex constraints $\sum_i \pi_i=1$, $\sum_j a_{ij}=1$, $\sum_k b_{i,m}(k)=1$ via Lagrange multipliers yields normalized expected counts. That’s “Baum–Welch”. Same thing you should get if you derive EM straight.
+
+# M-step (discrete case, no priors)
+
+Single sequence (replace sums with $\sum_n$ for multiple sequences):
+
+**Initial:**
+
+$$
+\pi_i^{\text{new}} = \gamma_1(i).
+$$
+
+**Transition:**
+
+$$
+a_{ij}^{\text{new}} = \frac{\sum_{t=1}^{T-1} \xi_t(i,j)}{\sum_{t=1}^{T-1} \gamma_t(i)}.
+$$
+
+**Emission for each attribute $m$ and value $k$:**
+
+\[
+b_{i,m}^{\text{new}}(k) \;=\; \frac{\sum_{t=1}^{T} \gamma_t(i)\,\mathbf{1}\{A_t^{(m)}=k\}}{\sum_{t=1}^{T} \gamma_t(i)}.
+\]
 

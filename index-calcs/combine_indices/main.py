@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def save_csv(df: pd.DataFrame, file_path):
@@ -171,16 +172,54 @@ def extract_output():
     print(data)
 
 
+def plot_model_selection(csv_file: str):
+    """
+    Reads a CSV with columns: m, log_lik, aic, bic
+    and plots log-likelihood, AIC, and BIC vs number of states (m).
+    """
+    # Load the data
+    df = pd.read_csv(csv_file)
+
+    # Set up the plot
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+
+    # Plot log-likelihood on the left y-axis
+    ax1.plot(
+        df["m"], df["log_lik"], marker="o", color="tab:blue", label="Log-Likelihood"
+    )
+    ax1.set_xlabel("Number of Hidden States (m)")
+    ax1.set_ylabel("Log-Likelihood", color="tab:blue")
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+
+    # Add secondary axis for AIC/BIC
+    ax2 = ax1.twinx()
+    ax2.plot(df["m"], df["aic"], marker="s", color="tab:orange", label="AIC")
+    ax2.plot(df["m"], df["bic"], marker="^", color="tab:green", label="BIC")
+    ax2.set_ylabel("AIC / BIC", color="tab:gray")
+    ax2.tick_params(axis="y", labelcolor="tab:gray")
+
+    # Combine legends
+    lines, labels = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines + lines2, labels + labels2, loc="best")
+
+    plt.title("Model Selection Diagnostics (Log-Lik, AIC, BIC)")
+    plt.tight_layout()
+    plt.show()
+
+
 def main():
-    extract_output()
+    plot_model_selection("../../data/synthetic/modelSelection.csv")
     return
+    # extract_output()
+    # return
     attrs = {
         "A1": {"type": "discrete", "cardinality": 8},
         "A2": {"type": "discrete", "cardinality": 7},
         # Example of cts Attribute "A2": {"type": "continuous", "distribution": "normal", "mean": 0, "cov": 1},
     }
 
-    synthetic_data = generate_data(T=300, attribute_types=attrs)
+    synthetic_data = generate_data(T=10, attribute_types=attrs)
     print(synthetic_data)
     save_csv(synthetic_data, file_path="../../data/synthetic/test.csv")
     return
