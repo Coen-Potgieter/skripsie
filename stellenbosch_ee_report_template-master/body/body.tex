@@ -284,12 +284,44 @@ Okay, lets regroup. Just so we fully get it. This is done after our model has be
 
 
 
+\section{Meditating a little bit more on model output}
+
+\section{What I have been doing}
+
+We are computing the pointwise marginal MAP, often called the Maximum Posterior Marginal (MPM) rule. For each time 
+$t$, we pick: 
+\[
+    \hat{s}_t = \underset{s}{\operatorname{argmax}} \;\; p(S_t = s \mid A_{1:T}, \Theta)
+\]
+
+The MPM picks the most likely state at each time independently — which can lead to an impossible or very unlikely global sequence (eg. $S_t \equiv$ Very Wet, then $S_{t+1} \equiv$ Very Dry). It maximizes expected per-time classification accuracy, but it does not maximize the joint posterior probability of the entire sequence.
+
+\section{Viterbi Algorithm}
+
+The paper recommends the Viterbi algorithm, which finds
+\[
+    \vec{s}^* = \underset{\vec{S}_{1:T}}{\operatorname{argmax}} \;\; p(\vec{S}_{1:T}\mid A_{1:T}, \Theta)
+
+\]
+
+ie. The single state sequence with the highest joint posterior probability. That sequence respects transitions and is temporally coherent.
+
+
+
+
+Okay, Just a little reminder, we have used the LBU paired with EM. I spoke to my professor and he mentioned that because of the model structure, we are actually constructing a Junction Tree meaning we get exact inference. Additionally, because of how the junction tree we start from the leaf nodes, the formulation of using the JTREE vs Forward-Backward is actually the exact same (Check math behind this...). 
+
+Anyway, we have our model output now $p(\vec{S}_{1:T} \mid A_{1:T}, \Theta)$ which is an exact measure. How do i know get the output of my model. The paper I am implementing says this: "With the estimated optimal DNBC parameters, the most probable path of the latent drought state that maximizes P(A|·) together with the probability of each state at every time step can be obtained using the Viterbi algorithm (Rabiner 1989)." Right now I am simply taking the maximum confidence for each $p(S_t \mid A_{1:T}, \Theta)$. This is most probably wrong. What must I do, explain to me what i must do and why what im doing is wrong (if it is wrong.)
 
 
 
 
 
 
+
+
+\newpage
+\section{THIS NEEDS TO BE CLEANED UP, NOT SURE WHAT THESE THINGS BELOW ARE}
 
 
 Reminder: These are factors we have available:

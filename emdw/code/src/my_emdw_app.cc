@@ -55,19 +55,28 @@ std::vector<T> createRandomVector(const size_t vecSize, const T mean = 0,
 
 // ==================== File Handling ====================
 // Input
-std::vector<std::vector<float>> readCSV(std::string_view filePath,
-                                        bool hasHeader = true);
-// Output
-void saveModelOutput(std::string_view filePath, ClusterGraph &cg,
-                     std::map<Idx2, rcptr<Factor>> &msgs, const int m,
-                     const std::vector<emdw::RVIdType> &droughtStateRvIDs);
+std::vector<std::vector<int>> readData(std::string_view filePath,
+                                       bool hasHeader = true);
+// Model Seclection Output
+void saveModelSelectionOutput(std::string_view outputPathCSV,
+                              const std::vector<std::vector<double>> &results,
+                              const size_t mMin);
+
+void processAndSaveModelOutput(
+    std::string_view dirPath, ClusterGraph &cg,
+    std::map<Idx2, rcptr<Factor>> &msgs,
+    const std::vector<emdw::RVIdType> &droughtStateRvIDs,
+    const std::vector<double> &finalPriors,
+    const std::vector<std::vector<double>> &finalTrans,
+    const std::vector<std::vector<std::vector<double>>> &finalEmissions,
+    const std::vector<std::vector<int>> &observedAttributes);
 
 // ==================== Creating Params ====================
 std::vector<double> createRandomPriors(const int m, const double mean = 0.0,
                                        const double variance = 1.0);
 std::vector<std::vector<double>> createRandomTransitionParams(
     const int m, const double mean = 0.0, const double variance = 1.0);
-std::vector<std::vector<std::vector<double>>> createEmissionParamsDiscrete(
+std::vector<std::vector<std::vector<double>>> createEmissionParams(
     const std::vector<rcptr<std::vector<int>>> &attributeRvDomains,
     const size_t m, const double variance = 1.0, const double mean = 0);
 
@@ -86,7 +95,7 @@ std::vector<rcptr<Factor>> createTransitionFactors(
     const rcptr<std::vector<int>> &droughtStateDomain,
     const std::vector<std::vector<double>> &transitionMatrix,
     const std::vector<emdw::RVIdType> &droughtStateIds);
-std::vector<std::vector<rcptr<Factor>>> createEmissionFactorsDiscrete(
+std::vector<std::vector<rcptr<Factor>>> createEmissionFactors(
     const std::vector<emdw::RVIdType> &droughtStateRvIDs,
     const std::vector<std::vector<emdw::RVIdType>> &attributeRvIds,
     const rcptr<std::vector<int>> &droughtStateDomain,
@@ -100,25 +109,29 @@ bool validateRvIds(const bool &debug,
                    const std::vector<std::vector<float>> &observedAttributes);
 
 // ==================== Model Inference ====================
-std::pair<ClusterGraph, std::map<Idx2, rcptr<Factor>>>
-performLBU_LTRIP_discrete(
+std::pair<ClusterGraph, std::map<Idx2, rcptr<Factor>>> performLBU_LTRIP(
     const rcptr<Factor> &pS1,
     const std::vector<rcptr<Factor>> &transitionFactors,
     const std::vector<std::vector<rcptr<Factor>>> &emissionFactors,
     const std::vector<emdw::RVIdType> &droughtStateRvIDs,
     const std::vector<std::vector<emdw::RVIdType>> &attributeRvIds,
-    const std::vector<std::vector<float>> &observedAttributes);
+    const std::vector<std::vector<int>> &observedAttributes);
 std::tuple<std::vector<double>, std::vector<std::vector<double>>,
            std::vector<std::vector<std::vector<double>>>>
 runModel(const size_t m,
-         const std::vector<std::vector<float>> &observedAttributes,
-         const size_t maxIters, std::string_view outputPathCSV,
-         const bool debug);
+         const std::vector<std::vector<int>> &observedAttributes,
+         const size_t maxIters, std::string_view outputDir, const bool debug);
 
-void modelSelection(const std::vector<std::vector<float>> &observedAttributes,
+void modelSelection(const std::vector<std::vector<int>> &observedAttributes,
                     const std::pair<size_t, size_t> &mRange,
                     const size_t maxEMIters, const size_t numRestartIters,
                     std::string_view outputPathCSV, const bool debug);
+
+std::pair<std::vector<int>, double> viterbi(
+    const std::vector<double> &logPriors,
+    const std::vector<std::vector<double>> &logTrans,
+    const std::vector<std::vector<double>> &logEmit);
+
 // ==================== Main Function ====================
 int main(int, char *argv[]) {
     // NOTE: this activates logging and unit tests
@@ -147,9 +160,9 @@ int main(int, char *argv[]) {
         // Load Data
         debugPrint(DEBUG,
                    "Loading Drought Indices From '" + inpPathCSV + "' ...");
-        std::vector<std::vector<float>> observedAttributes;
+        std::vector<std::vector<int>> observedAttributes;
         try {
-            observedAttributes = readCSV(inpPathCSV);
+            observedAttributes = readData(inpPathCSV);
         } catch (std::exception &e) {
             std::cerr << "ERROR: " << e.what() << '\n';
             return 1;
@@ -158,13 +171,15 @@ int main(int, char *argv[]) {
         // Print Attributes
         if (DEBUG) print2DArray(observedAttributes);
 
-        modelSelection(observedAttributes, std::make_pair(3, 10), maxIters, 10,
-                       "../../../data/synthetic/modelSelection.csv", DEBUG);
+        // modelSelection(observedAttributes, std::make_pair(3, 10),
+        // maxIters, 10,
+        //                "../../../data/synthetic/modelSelection.csv",
+        //                DEBUG);
 
-        return 0;
+        // return 0;
 
-        runModel(m, observedAttributes, maxIters,
-                 "../../../data/synthetic/output.csv", DEBUG);
+        runModel(m, observedAttributes, maxIters, "../../../data/synthetic/",
+                 DEBUG);
 
         return 0;  // tell the world that all is fine
     }  // try
@@ -191,7 +206,6 @@ int main(int, char *argv[]) {
         cerr << "An unknown exception / error occurred\n";
         throw;
     }  // catch
-    //
 }
 
 void debugPrint(bool debug, std::string message) {
@@ -453,7 +467,6 @@ void printFactor(const Factor &factor, std::string_view factorName) {
 }
 
 // ==================== File Handling ====================
-// TODO: CHANGE FLOATS TO INTS SINCE WE STAYING DISCRETE NOW
 /**
  * @brief
  *  - Reads in Drought Inidice Attributes.
@@ -463,11 +476,11 @@ void printFactor(const Factor &factor, std::string_view factorName) {
  * @return
  *  - 2D Array (Number Attributes, Value At Each Time Step) → (N, T)
  */
-std::vector<std::vector<float>> readCSV(std::string_view filePath,
-                                        bool hasHeader) {
+std::vector<std::vector<int>> readData(std::string_view filePath,
+                                       bool hasHeader) {
     std::ifstream fin;
     std::string line;
-    std::vector<std::vector<float>> outp;
+    std::vector<std::vector<int>> outp;
 
     fin.open(filePath);
     if (!fin) {
@@ -481,9 +494,9 @@ std::vector<std::vector<float>> readCSV(std::string_view filePath,
     while (std::getline(fin, line)) {
         std::vector<std::string> lineElements = splitByCharacter(line, ',');
 
-        std::vector<float> timeStep;
+        std::vector<int> timeStep;
         for (size_t i = 0; i < lineElements.size(); i++) {
-            float value = std::stof(lineElements.at(i));
+            int value = std::stoi(lineElements.at(i));
             timeStep.push_back(value);
         }
         outp.push_back(timeStep);
@@ -495,27 +508,32 @@ std::vector<std::vector<float>> readCSV(std::string_view filePath,
 
 /**
  * @brief
- *  - Saves Model Output As A CSV
+ *  - Processes and Saves Model Output As two CSV files
+ *  - Ouptuts one for MPM Rule & One for Vertibi Algo
  * @param
- *  - `filePath`: Where to save CSV
+ *  - `dirPath`: Where to save CSVs
  *  - `cg`: Output of LBU
  *  - `msgs`: Output of LBU
- *  - `m`: Cardinality of S_t
  *  - `droughtStateRvIDs`: IDs of all S_t
+ *  -  `finalPriors`: Final Prior Probs From Model
+ *  - `finalTrans`: Final Transition Probs From Model
+ *  - `finalEmissions`: Final Emission Probs From Model
+ *  - `observedAttributes`: Observed Data
  */
-void saveModelOutput(std::string_view filePath, ClusterGraph &cg,
-                     std::map<Idx2, rcptr<Factor>> &msgs, const int m,
-                     const std::vector<emdw::RVIdType> &droughtStateRvIDs) {
+void processAndSaveModelOutput(
+    std::string_view dirPath, ClusterGraph &cg,
+    std::map<Idx2, rcptr<Factor>> &msgs,
+    const std::vector<emdw::RVIdType> &droughtStateRvIDs,
+    const std::vector<double> &finalPriors,
+    const std::vector<std::vector<double>> &finalTrans,
+    const std::vector<std::vector<std::vector<double>>> &finalEmissions,
+    const std::vector<std::vector<int>> &observedAttributes) {
     size_t T = droughtStateRvIDs.size();
+    size_t N = observedAttributes.at(0).size();
+    size_t m = finalPriors.size();
 
-    std::ofstream fout;
-    fout.open(filePath);
-    if (!fout)
-        throw std::invalid_argument("Could Not Open: `" +
-                                    std::string(filePath) + '`');
-
-    fout << "St\n";
-
+    // ==================== MPM Rule ====================
+    std::vector<int> MPMrule;
     for (size_t t = 0; t < T; t++) {
         rcptr<Factor> qSt =
             queryLBU_CG(cg, msgs, {droughtStateRvIDs.at(t)})->normalize();
@@ -536,8 +554,99 @@ void saveModelOutput(std::string_view filePath, ClusterGraph &cg,
             throw std::runtime_error(
                 "Extracting Of Drought States Went Wrong...");
 
+        MPMrule.push_back(maxVal);
+    }
+
+    // ==================== Vertibi ====================
+    // First need p(\vec{A}_t | S_t = i)
+    //  - Working in log-space, and will simply exec exp(log(p(...)))
+    //      if I want to use it
+    std::vector<std::vector<double>> log_pAgSi(T, std::vector<double>(m, 0.0));
+    for (size_t t = 0; t < T; t++) {
+        for (size_t i = 0; i < m; i++) {
+            for (size_t n = 0; n < N; n++) {
+                int obs = observedAttributes.at(t).at(n);
+                double p = finalEmissions.at(n).at(obs - 1).at(i);
+                log_pAgSi[t][i] += std::log(p);
+            }
+        }
+    }
+
+    // Then need the rest in log space
+    std::vector<double> logPriors;
+    for (const auto &elem : finalPriors) {
+        logPriors.push_back(std::log(elem));
+    }
+    std::vector<std::vector<double>> logTrans;
+    for (const auto &row : finalTrans) {
+        std::vector<double> inpRow;
+        for (const auto &elem : row) {
+            inpRow.push_back(std::log(elem));
+        }
+        logTrans.push_back(inpRow);
+    }
+
+    auto [vertibiPath, vertibiLogProb] =
+        viterbi(logPriors, logTrans, log_pAgSi);
+
+    // ==================== Save Output ====================
+    // MPM
+    std::ofstream fout;
+    fout.open(std::string(dirPath) + "mpm_rule_output.csv");
+    if (!fout)
+        throw std::invalid_argument("Could Not Access: `" +
+                                    std::string(dirPath) + '`');
+
+    fout << "St\n";
+    for (size_t t = 0; t < T; t++) {
         // Populate CSV with value
-        fout << maxVal << '\n';
+        fout << MPMrule.at(t) << '\n';
+    }
+    fout.close();
+
+    // Veterbi
+    fout.open(std::string(dirPath) + "veterbi_output.csv");
+    if (!fout)
+        throw std::invalid_argument("Could Not Access: `" +
+                                    std::string(dirPath) + '`');
+
+    fout << "St,log_prob\n"
+         << std::to_string(vertibiPath.at(0)) << ','
+         << std::to_string(vertibiLogProb) << '\n';
+    for (size_t t = 1; t < T; t++) {
+        // Populate CSV with value
+        fout << vertibiPath.at(t) << ",\n";
+    }
+    fout.close();
+}
+
+/**
+ * @brief
+ *  - Saves output of Model Seclection as a CSV
+ *      - {Log-Likelihood, AIC, BIC} at different values of `m`
+ * @param
+ *  - `outputPathCSV`: Output path for where to save the CSV
+ *  - `results`: Model Selection Output
+ *      - 2D array of m vectors of size 3: {Log-Likelihood, AIC, BIC}
+ *  - `mMin` Starting `m`
+ */
+void saveModelSelectionOutput(std::string_view outputPathCSV,
+                              const std::vector<std::vector<double>> &results,
+                              const size_t mMin) {
+    std::ofstream fout;
+    fout.open(outputPathCSV);
+    if (!fout)
+        throw std::invalid_argument("Given `filePath` could not be opened: " +
+                                    std::string(outputPathCSV));
+
+    debugPrint(debug, "Saving Output...");
+    // Heading
+    fout << "m,log_lik,aic,bic\n";
+    for (size_t i = 0; i < results.size(); i++) {
+        fout << std::to_string(mMin + i) << ','
+             << std::to_string(results.at(i).at(0)) << ','
+             << std::to_string(results.at(i).at(1)) << ','
+             << std::to_string(results.at(i).at(2)) << '\n';
     }
     fout.close();
 }
@@ -591,7 +700,7 @@ std::vector<std::vector<double>> createRandomTransitionParams(
  * @return
  *  - Returns Parameters
  */
-std::vector<std::vector<std::vector<double>>> createEmissionParamsDiscrete(
+std::vector<std::vector<std::vector<double>>> createEmissionParams(
     const std::vector<rcptr<std::vector<int>>> &attributeRvDomains,
     const size_t m, const double variance, const double mean) {
     std::vector<std::vector<std::vector<double>>> emissionProbs;
@@ -792,7 +901,7 @@ std::vector<rcptr<Factor>> createTransitionFactors(
  * @return
  *  - 2D Array of Emission Factors (See Tablet For DS)
  */
-std::vector<std::vector<rcptr<Factor>>> createEmissionFactorsDiscrete(
+std::vector<std::vector<rcptr<Factor>>> createEmissionFactors(
     const std::vector<emdw::RVIdType> &droughtStateRvIDs,
     const std::vector<std::vector<emdw::RVIdType>> &attributeRvIds,
     const rcptr<std::vector<int>> &droughtStateDomain,
@@ -888,7 +997,7 @@ std::vector<std::vector<rcptr<Factor>>> createEmissionFactorsDiscrete(
 bool validateRvIds(const bool &debug,
                    const std::vector<emdw::RVIdType> &droughtStateIds,
                    const std::vector<std::vector<emdw::RVIdType>> &attributeIds,
-                   const std::vector<std::vector<float>> &observedAttributes) {
+                   const std::vector<std::vector<int>> &observedAttributes) {
     int lastItem = -1;
 
     // Cylce Through hidden drought states
@@ -933,14 +1042,13 @@ bool validateRvIds(const bool &debug,
  * @return
  *  - Package of two variables that is needed for querying
  */
-std::pair<ClusterGraph, std::map<Idx2, rcptr<Factor>>>
-performLBU_LTRIP_discrete(
+std::pair<ClusterGraph, std::map<Idx2, rcptr<Factor>>> performLBU_LTRIP(
     const rcptr<Factor> &pS1,
     const std::vector<rcptr<Factor>> &transitionFactors,
     const std::vector<std::vector<rcptr<Factor>>> &emissionFactors,
     const std::vector<emdw::RVIdType> &droughtStateRvIDs,
     const std::vector<std::vector<emdw::RVIdType>> &attributeRvIds,
-    const std::vector<std::vector<float>> &observedAttributes) {
+    const std::vector<std::vector<int>> &observedAttributes) {
     // ==================== Init Things ====================
     size_t T = droughtStateRvIDs.size();
     size_t N = attributeRvIds.at(0).size();
@@ -975,7 +1083,7 @@ performLBU_LTRIP_discrete(
     for (size_t t = 0; t < T; t++) {
         for (size_t n = 0; n < N; n++) {
             observedData[attributeRvIds.at(t).at(n)] =
-                static_cast<int>(observedAttributes.at(t).at(n));
+                observedAttributes.at(t).at(n);
         }
     }
 
@@ -1000,17 +1108,34 @@ performLBU_LTRIP_discrete(
     return std::make_pair(cg, msgs);
 }
 
+/**
+ * @brief
+ *  - Creates model & runs EM Algorithm
+ *  - If valid `outputPathCSV` is given it extracts posterior chain
+ *  - if invalud path, will then return the final paramaters (for model
+ *  seclection)
+ * @param
+ *  - `m`: Cardinality of S_t
+ *  - `observedAttributes`: Data
+ *  - `maxIters`: Maximum number of EM iters
+ *  - `outputDir`: Which Directory to save output
+ *      - if != "None" will save else will skip
+ *      - Must have have trailing `/`
+ * output chain)
+ *  - `debug`: flag that triggers debug printing
+ * @return
+ *  - A tuple: {Priors, Transition Matrix, Emission Probabilities}
+ */
 std::tuple<std::vector<double>, std::vector<std::vector<double>>,
            std::vector<std::vector<std::vector<double>>>>
 runModel(const size_t m,
-         const std::vector<std::vector<float>> &observedAttributes,
-         const size_t maxIters, std::string_view outputPathCSV,
-         const bool debug) {
+         const std::vector<std::vector<int>> &observedAttributes,
+         const size_t maxIters, std::string_view outputDir, const bool debug) {
     //*********************************************************
     // Specify Parameters
     // *********************************************************
-    // TODO: ASK ABOUT THIS
-    // Noise to conditionally break symmetry of the model
+    // NOTE: Not sure if conditionally breaking symmetry is necessary...
+    //  Can't hurt I suppose.
     float priorNoise = 0.005;
 
     // Create Prior Params
@@ -1065,30 +1190,23 @@ runModel(const size_t m,
     // *********************************************************
     //  - We need a `rcptr` of a vector of ints
     //  - This vector of ints will represent all the possible values the
-    //  RV
-    //      can take on.
+    //  RV can take on.
     //  - This is quite simple but still out sourcing to a sperate
     //  function
-    //  - Note that this is only for Discrete Factors... (I think)
 
     debugPrint(debug, "Creating Domains Of The RVs Of The Model...");
 
     // Hidden Drought State is simply `[1, 2, ..., m]`
     rcptr<std::vector<int>> droughtStateDomain = createDiscreteRvDomain(m);
 
-    // NOTE: This step will change if our attribute RVs are cts, ie.
-    // This is Discerete Case. Here we have a vector of
-    // `rcptr<std::vector<int>>`s of course indexed by each attribute
-    // (Note: This is only for discrete A_t^n)
+    // Attribute RVs
     std::vector<rcptr<std::vector<int>>> attributeRvDomains;
 
     // Along columns, thus `maxVals.size()` == N
-    std::vector<float> maxVals = findMaxAlongAxis(observedAttributes, 0);
+    std::vector<int> maxVals = findMaxAlongAxis(observedAttributes, 0);
 
     for (size_t n = 0; n < N; n++) {
-        // Convert to int
-        int maxVal = static_cast<int>(maxVals.at(n));
-        attributeRvDomains.push_back(createDiscreteRvDomain(maxVal));
+        attributeRvDomains.push_back(createDiscreteRvDomain(maxVals.at(n)));
     }
 
     printDomainDroughtState(debug, droughtStateDomain);
@@ -1128,12 +1246,9 @@ runModel(const size_t m,
     }
 
     // ================= Emission → p(A_t^n | S_t) =================
-    // NOTE: This step will change if our attribute RVs are cts, ie.
-    // This is Discerete Case.
-
     // Create Parameters
     std::vector<std::vector<std::vector<double>>> oldEmissionProbs =
-        createEmissionParamsDiscrete(attributeRvDomains, m);
+        createEmissionParams(attributeRvDomains, m);
 
     assert(oldEmissionProbs.size() == N);
 
@@ -1147,9 +1262,9 @@ runModel(const size_t m,
 
     // Create Factors
     std::vector<std::vector<rcptr<Factor>>> emissionFactors =
-        createEmissionFactorsDiscrete(droughtStateRvIDs, attributeRvIds,
-                                      droughtStateDomain, attributeRvDomains,
-                                      oldEmissionProbs);
+        createEmissionFactors(droughtStateRvIDs, attributeRvIds,
+                              droughtStateDomain, attributeRvDomains,
+                              oldEmissionProbs);
 
     if (debug) printFactor(*emissionFactors.at(0).at(1), "p(A^2_1 | S_1)");
 
@@ -1168,9 +1283,9 @@ runModel(const size_t m,
     while (1) {
         // ============= Obtain p(H|D, Theta) (E-Step) ============
         std::pair<ClusterGraph, std::map<Idx2, rcptr<Factor>>> outp =
-            performLBU_LTRIP_discrete(pS1, transitionFactors, emissionFactors,
-                                      droughtStateRvIDs, attributeRvIds,
-                                      observedAttributes);
+            performLBU_LTRIP(pS1, transitionFactors, emissionFactors,
+                             droughtStateRvIDs, attributeRvIds,
+                             observedAttributes);
         auto &[cg, msgs] = outp;
 
         // ================ Parameter Update (M-Step) ================
@@ -1262,7 +1377,6 @@ runModel(const size_t m,
                 m + 1, std::vector<double>(Cn + 1, 0.0));
 
             for (size_t t = 0; t < T; t++) {
-                // TODO: This code assumes A^n_t is discrete
                 int observedValue = observedAttributes.at(t).at(n);
                 for (size_t i = 1; i <= m; i++) {
                     stateObsCounts[i][observedValue] +=
@@ -1315,7 +1429,7 @@ runModel(const size_t m,
             print2DArray(oldTransitionMatrix, "Old Transition Matrix");
             print2DArray(newTransitionMatrix, "New Transition Matrix");
 
-            // TODO:
+            // TODO: Make a print function for emission probabilities
             std::cout << "Not printing emission probs...\n";
 
             std::cout << "------------------------\n\n";
@@ -1332,10 +1446,11 @@ runModel(const size_t m,
             // End Timer
             endEM = std::chrono::high_resolution_clock::now();
 
-            // This is the condition for not saving output (AIC, BIC, Log L)
-            if (outputPathCSV != "None") {
-                debugPrint(debug, "Saving Output");
-                saveModelOutput(outputPathCSV, cg, msgs, m, droughtStateRvIDs);
+            // This is the condition for saving output (AIC, BIC, Log L)
+            if (outputDir != "None") {
+                processAndSaveModelOutput(
+                    outputDir, cg, msgs, droughtStateRvIDs, oldPriors,
+                    oldTransitionMatrix, oldEmissionProbs, observedAttributes);
             }
             break;
         }
@@ -1349,8 +1464,7 @@ runModel(const size_t m,
             droughtStateDomain, oldTransitionMatrix, droughtStateRvIDs);
 
         // Emission
-        // NOTE: This is Discerete Case.
-        emissionFactors = createEmissionFactorsDiscrete(
+        emissionFactors = createEmissionFactors(
             droughtStateRvIDs, attributeRvIds, droughtStateDomain,
             attributeRvDomains, oldEmissionProbs);
     }
@@ -1367,12 +1481,27 @@ runModel(const size_t m,
 
     // Now need to return the params
     //  - This will not be used when doing final inference with a set `m`
-    //  - However, for model selection, we need to calculate likelihood which
+    //  - However, for model selection, we need to calculate likelihood
+    //  which
     //      simply requires the final parameters
     return {oldPriors, oldTransitionMatrix, oldEmissionProbs};
 }
 
-void modelSelection(const std::vector<std::vector<float>> &observedAttributes,
+/**
+ * @brief
+ *  - Sweeps across given range for `m` and records the log-likelihood, AIC
+ * & BIC for each `m`
+ *  - These values then get saved as a csv to
+ * @param
+ *  - `observedAttributes`: Data
+ *  - `mRange`: should contain the range of `m` values to sweep through:
+ *      - [min(m), max(m)] inclusive
+ *  - `maxEMIters`: Maximum number of EM iters
+ *  - `numRestartIters`: Number of random restarts per value of `m`
+ *  - `outputPathCSV`: Save path for stats
+ *  - `debug`: flag that triggers debug printing
+ */
+void modelSelection(const std::vector<std::vector<int>> &observedAttributes,
                     const std::pair<size_t, size_t> &mRange,
                     const size_t maxEMIters, const size_t numRestartIters,
                     std::string_view outputPathCSV, const bool debug) {
@@ -1381,9 +1510,10 @@ void modelSelection(const std::vector<std::vector<float>> &observedAttributes,
 
     std::vector<size_t> CnVals(N, 0);
 
-    // Holding results in 2d array where each row is {loglik, AIC, BIC}. And of
-    //  course, we have `mRange.second - mRange.first` of these rows. So size of
-    //  array is (mRange.second - mRange.first, 3)
+    // Holding results in 2d array where each row is {loglik, AIC, BIC}. And
+    // of
+    //  course, we have `mRange.second - mRange.first` of these rows. So
+    //  size of array is (mRange.second - mRange.first, 3)
     std::vector<std::vector<double>> results;
 
     for (size_t m = mRange.first; m <= mRange.second; m++) {
@@ -1397,21 +1527,21 @@ void modelSelection(const std::vector<std::vector<float>> &observedAttributes,
             auto [priors, transitionProbs, emissionProbs] =
                 runModel(m, observedAttributes, maxEMIters, "None", false);
 
-            // ==================== Calculate Log-Likelihood
-            // ==================== p(\vec{A}_t | S_t = i)
-            //  - Working in log-space, and will simply exec exp(log(p(...)))
+            // ================== Calculate Log-Likelihood
+            // ================== p(\vec{A}_t | S_t = i)
+            //  - Working in log-space, and will simply exec
+            //  exp(log(p(...)))
             //      if I want to use it
             std::vector<std::vector<double>> log_pAgSi(
                 T, std::vector<double>(m, 0.0));
             for (size_t t = 0; t < T; t++) {
                 for (size_t i = 0; i < m; i++) {
                     for (size_t n = 0; n < N; n++) {
-                        // Here we populating CnVals but only on very first iter
+                        // Here we populating CnVals but only on very first
+                        // iter
                         if (m == mRange.first && r == 0) {
                             CnVals[n] = emissionProbs.at(n).size();
                         }
-
-                        // TODO: If MOVING FROM DISCRETE THEN CHANGE THIS
                         int obs = observedAttributes.at(t).at(n);
                         double p = emissionProbs.at(n).at(obs - 1).at(i);
                         log_pAgSi[t][i] += std::log(p);
@@ -1477,22 +1607,89 @@ void modelSelection(const std::vector<std::vector<float>> &observedAttributes,
     }
 
     // Now to save the results :)
-    std::ofstream fout;
-    fout.open(outputPathCSV);
-    if (!fout)
-        throw std::invalid_argument("Given `filePath` could not be opened: " +
-                                    std::string(outputPathCSV));
-
-    debugPrint(debug, "Saving Output...");
-    // Heading
-    fout << "m,log_lik,aic,bic\n";
-    for (size_t i = 0; i < results.size(); i++) {
-        fout << std::to_string(mRange.first + i) << ','
-             << std::to_string(results.at(i).at(0)) << ','
-             << std::to_string(results.at(i).at(1)) << ','
-             << std::to_string(results.at(i).at(2)) << '\n';
-    }
-    fout.close();
+    saveModelSelectionOutput(outputPathCSV, results, mRange.first);
     debugPrint(debug, "✓ Success");
     return;
+}
+
+/**
+ * @brief
+ *  - Runs the Viterbi algorithm to find the most probable hidden state
+ *      sequence.
+ *  - Everything is done in log-space to prevent numerical underflow.
+ * @param
+ *  - `logPriors`: log of our final prior probabilities
+ *  - `logTrans`: log of our final transition matrix
+ *  - `logEmit`: log P(A_t | S_t = j), factorisation of across all N attributes
+ * @return
+ *  - A pair where
+ *      - first: vector of length T, giving the most probable state at each
+ *                  time.
+ *      - second: the log-probability of the Viterbi path.
+ */
+std::pair<std::vector<int>, double> viterbi(
+    const std::vector<double> &logPriors,
+    const std::vector<std::vector<double>> &logTrans,
+    const std::vector<std::vector<double>> &logEmit) {
+    size_t T = logEmit.size();
+    size_t m = logPriors.size();
+
+    // Dimension checks
+    if (logTrans.size() != m)
+        throw std::invalid_argument("Transition matrix must have m rows.");
+    for (size_t i = 0; i < m; i++) {
+        if (logTrans[i].size() != m)
+            throw std::invalid_argument("Transition matrix must be m x m.");
+    }
+    for (size_t t = 0; t < T; t++) {
+        if (logEmit[t].size() != m)
+            throw std::invalid_argument("Emission matrix must be T x m.");
+    }
+
+    // DP tables
+    std::vector<std::vector<double>> delta(
+        T, std::vector<double>(m, -std::numeric_limits<double>::infinity()));
+    std::vector<std::vector<int>> psi(T, std::vector<int>(m, -1));
+
+    // Initialization
+    for (size_t j = 0; j < m; j++) {
+        delta[0][j] = logPriors[j] + logEmit[0][j];
+    }
+
+    // Recursion
+    for (size_t t = 1; t < T; t++) {
+        for (size_t j = 0; j < m; j++) {
+            double max_val = -std::numeric_limits<double>::infinity();
+            int argmax_i = -1;
+
+            for (size_t i = 0; i < m; i++) {
+                double val = delta[t - 1][i] + logTrans[i][j];
+                if (val > max_val) {
+                    max_val = val;
+                    argmax_i = (int)i;
+                }
+            }
+            delta[t][j] = max_val + logEmit[t][j];
+            psi[t][j] = argmax_i;
+        }
+    }
+
+    // Termination
+    double best_log_prob = -std::numeric_limits<double>::infinity();
+    int best_last_state = -1;
+    for (size_t j = 0; j < m; j++) {
+        if (delta[T - 1][j] > best_log_prob) {
+            best_log_prob = delta[T - 1][j];
+            best_last_state = (int)j;
+        }
+    }
+
+    // Backtrace
+    std::vector<int> best_path(T);
+    best_path[T - 1] = best_last_state;
+    for (int t = (int)T - 1; t > 0; t--) {
+        best_path[t - 1] = psi[t][best_path[t]];
+    }
+
+    return {best_path, best_log_prob};
 }

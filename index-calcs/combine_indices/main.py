@@ -209,17 +209,17 @@ def plot_model_selection(csv_file: str):
 
 
 def main():
-    plot_model_selection("../../data/synthetic/modelSelection.csv")
-    return
+    # plot_model_selection("../../data/synthetic/modelSelection.csv")
+    # return
     # extract_output()
     # return
     attrs = {
         "A1": {"type": "discrete", "cardinality": 8},
         "A2": {"type": "discrete", "cardinality": 7},
-        "A3": {"type": "discrete", "cardinality": 7},
+        # "A3": {"type": "discrete", "cardinality": 7},
     }
 
-    synthetic_data = generate_data(T=10, attribute_types=attrs)
+    synthetic_data = generate_data(T=20, attribute_types=attrs)
     print(synthetic_data)
     save_csv(synthetic_data, file_path="../../data/synthetic/test.csv")
     return
