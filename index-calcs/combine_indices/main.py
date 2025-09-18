@@ -216,7 +216,7 @@ def main():
     attrs = {
         "A1": {"type": "discrete", "cardinality": 8},
         "A2": {"type": "discrete", "cardinality": 7},
-        # Example of cts Attribute "A2": {"type": "continuous", "distribution": "normal", "mean": 0, "cov": 1},
+        "A3": {"type": "discrete", "cardinality": 7},
     }
 
     synthetic_data = generate_data(T=10, attribute_types=attrs)
