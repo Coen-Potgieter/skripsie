@@ -4,17 +4,14 @@
 \chapter{Methods}
 \label{chap:methods}
 \section{Data Acquisition}
-The development of a composite drought indicator requires careful selection of input variables that capture the different aspects of drought. Three indices were selected: the Standardised Precipitation Index (SPI) to represent meteorological drought, the Streamflow Drought Index (SDI) to represent hydrological drought, and the Normalised Difference Vegetation Index (NDVI) as a proxy for agricultural drought. These indices were chosen based on their widespread use in literature and the availability of data. Data scarcity is a challenge in South Africa, as openly accessible, long and consistent drought-related datasets are limited. Consequently, the choice of indices attempts to strike a balance between theory and pragmatic constraints~\ref{za_drought_review,za_drought_review2,dnbc_drought_first,dnbc_drought_second}.
-
-\ref{za_drought_review}
-
+The development of a composite drought indicator requires careful selection of input variables that capture the different aspects of drought. Three indices were selected: the Standardised Precipitation Index (SPI) to represent meteorological drought, the Streamflow Drought Index (SDI) to represent hydrological drought, and the Normalised Difference Vegetation Index (NDVI) as a proxy for agricultural drought. These indices were chosen based on their widespread use in literature and the availability of data. Data scarcity is a challenge in South Africa, as openly accessible, long and consistent drought-related datasets are limited. Consequently, the choice of indices attempts to strike a balance between theory and pragmatic constraints~\cite{za_drought_review,za_drought_review2,dnbc_drought_first,dnbc_drought_second}.
 
 \subsection{Sources}
-To compute the SPI, monthly rainfall data was obtained from the University of Cape Town (UCT) dataset, which covers the period 1979–2019 (Dataset~\ref{uct_data}). The dataset provides rainfall values at the station level, offering a high degree of spatial granularity across South Africa.
+To compute the SPI, monthly rainfall data was obtained from the University of Cape Town (UCT) dataset, which covers the period 1979–2019 (Dataset~\cite{uct_data}). The dataset provides rainfall values at station level. This offers a high degree of granularity across South Africa.
 
-For the SDI, daily streamflow records were obtained from the Department of Water and Sanitation (DWS), which maintains audited historic data regarding hydrology (Dataset~\ref{DWS_2011}). These daily records were averaged to monthly to calculate the target index.
+For the SDI, daily streamflow records were obtained from the Department of Water and Sanitation (DWS), which maintains audited historic data regarding hydrology (Dataset~\cite{DWS_2011}). These daily records were averaged to create monthly records, which was then used to calculate the desired index.
 
-To obtain the NDVI, the NOAA Climate Data Record (CDR) of AVHRR Normalised Difference Vegetation Index (NDVI), Version~5 was used (Dataset~\ref{ndvi_data}). The dataset spans the period 1981–2025 and is provided in global NetCDF format. For the purposes of this study, only the South African subset was extracted. This required targeted downloading and filtering, given the large size of the global dataset.
+To obtain the NDVI, the NOAA Climate Data Record (CDR) of AVHRR Normalised Difference Vegetation Index (NDVI), Version~5 was used (Dataset~\cite{ndvi_data}). The dataset spans the period 1981–2025 and is provided in global NetCDF format. For the purposes of this study, only the South African subset was extracted. This required targeted downloading and filtering, given the large size of the global dataset.
 
 \subsection{Preprocessing}
 
@@ -26,43 +23,52 @@ To prepare the indices for model input, several preprocessing steps were perform
     \item \textbf{Brief Exploration Of Data:} The data sets were analysed to identify and issues in the data such as missing/null values, format consistency, validity, etc. No problems were found
 \end{enumerate}
 
+
 \section{Index Calculation}
 \label{sec:index-calc}
+The collected data was transformed into drought indices using well-known methodologies. As mentioned, each index captures different dimensions of drought conditions. Together they provide a more comprehensive view than any single measure. \\
+Below is a brief overview of each index and its mathematical formulation. Full derivations and discussions are available in the cited references.
 
-The selected datasets were subsequently transformed into drought indices using established methodologies. The SPI was derived from rainfall anomalies through standardisation against a long-term climatology. The SDI was computed by standardising streamflow anomalies relative to long-term hydrological records. The NDVI, while not a drought index in its raw form, was used to reflect vegetation stress associated with agricultural drought conditions. References to the seminal works underlying these methodologies are provided in the bibliography.
+\subsection{Standardised Precipitation Index (SPI)}
 
-\subsection{SPI}
+The SPI is based solely on precipitation and measures anomalies relative to the long-term probability distribution at a given location and timescale. The calculation involves fitting a long-term precipitation record to a gamma distribution, which is then transformed into a standard normal distribution~\cite{spi_seminal_paper}.
 
-The SPI is based on the statistical normalisation of accumulated precipitation over a specified time window. Precipitation values are first fitted to a probability distribution, commonly the gamma distribution, and then transformed into a standard normal distribution. This yields an index with mean zero and unit variance, allowing for direct interpretation of drought severity across different temporal scales.
+The SPI can be computed for different time scales (e.g., 1, 3, 6, or 12 months). This study employs the 3-month timescale (SPI-3), which is widely used for monitoring. Negative SPI values indicate dry conditions, with established thresholds categorising drought severity.
 
-\subsection{SDI}
+\subsection{Streamflow Drought Index (SDI)}
 
-The SDI extends the concept of the SPI to streamflow. It is calculated by aggregating streamflow over a specified time window and standardising it against long-term flow records. Positive values of SDI indicate above-normal hydrological conditions, while negative values reflect hydrological drought. The SDI is particularly relevant in South Africa, where surface water storage and river systems play a critical role in drought impact and management.
+The SDI extends the framework of the SPI to characterise hydrological drought using streamflow volumes. Monthly streamflow observations are aggregated and standardized in a similar manner to the SPI calculation~\cite{sdi_seminal_paper}.
 
-\subsection{NDVI}
+This method allows for the identification of periods with below-normal streamflow, indicating hydrological drought. Negative SDI values denote dry conditions, and the same severity thresholds used for the SPI are applied for categorisation.
 
-The NDVI is derived from remotely sensed reflectance in the red and near-infrared bands of the electromagnetic spectrum. Vegetated surfaces typically absorb red light for photosynthesis and reflect near-infrared light, making the NDVI an effective indicator of vegetation health. While NDVI is not a drought index per se, reductions in NDVI are widely used to monitor agricultural drought stress, as vegetation is sensitive to deficits in soil moisture and precipitation.
+\subsection{Normalised Difference Vegetation Index (NDVI)}
+
+The NDVI is a remote-sensing indicator widely used to monitor vegetation health and stress, including agricultural drought. It is derived from the difference in reflectance between the near-infrared (NIR) and red spectral bands:
+\[
+    \text{NDVI} = \frac{\rho_{\text{NIR}} - \rho_{\text{RED}}}{\rho_{\text{NIR}} + \rho_{\text{RED}}},
+\]
+where $\rho_{\text{NIR}}$ and $\rho_{\text{RED}}$ are the surface reflectances in their respective bands. Values range from $-1$ to $+1$, with higher values indicating healthy, active vegetation, while lower values reflect stressed or sparse vegetation~\cite{ndvi_seminal_paper}.
 
 \subsection{Discretisation of Indices}
-
-The SPI, SDI, and NDVI are all continuous variables. However, the Dynamic Naïve Bayes Classifier requires discrete inputs. Accordingly, each index was discretised into categorical bins based on thresholds reported in the literature and common practice. For example, SPI values are often classified into categories such as “extremely dry,” “moderately dry,” and “normal.” This discretisation not only facilitates model implementation but also aligns with the interpretive categories commonly employed in drought monitoring. A more detailed account of the discretisation procedure is provided in Section~\ref{sec:implementation}.
+The SPI, SDI, and NDVI are all continuous. However, the proposed model requires discrete inputs. Accordingly, each index was discretised into categorical bins based on thresholds widely used in literature. For example, SPI values are often classified into categories such as “extremely dry,” “moderately dry,” and “normal.” This discretisation not only aids in model implementation but it also motivates interpretability. Table~\ref{tbl:discretisation} below illustrates the bins used:
 
 \begin{table}[h]
-\centering
-\caption{Discretisation thresholds for drought indices.}
-\label{tab:discretisation}
-\begin{tabular}{lccc}
-\toprule
-\textbf{Category} & \textbf{SPI / SDI} & \textbf{NDVI Anomaly} & \textbf{Interpretation} \\
-\midrule
-Severe Drought    & $\leq -1.5$        & $\leq -1.5$          & Extreme vegetation/hydrological stress \\
-Moderate Drought  & $-1.5 < x \leq -0.5$ & $-1.5 < x \leq -0.5$ & Sustained but moderate deficit \\
-Normal            & $-0.5 < x < 0.5$  & $-0.5 < x < 0.5$     & Near-average conditions \\
-Moderate Wet      & $0.5 \leq x < 1.5$ & $0.5 \leq x < 1.5$   & Above-average moisture/greenness \\
-Severe Wet        & $\geq 1.5$        & $\geq 1.5$           & Flooding risk or excessive rainfall \\
-\bottomrule
-\end{tabular}
+    \centering
+    \caption{Discretisation thresholds for drought indices.}
+        \begin{tabular}{lccc}
+            \toprule
+            \textbf{Category} & \textbf{SPI / SDI} & \textbf{NDVI Anomaly} & \textbf{Interpretation} \\
+            \midrule
+            Severe Drought    & $\leq -1.5$        & $\leq -1.5$          & Extreme vegetation/hydrological stress \\
+            Moderate Drought  & $-1.5 < x \leq -0.5$ & $-1.5 < x \leq -0.5$ & Sustained but moderate deficit \\
+            Normal            & $-0.5 < x < 0.5$  & $-0.5 < x < 0.5$     & Near-average conditions \\
+            Moderate Wet      & $0.5 \leq x < 1.5$ & $0.5 \leq x < 1.5$   & Above-average moisture/greenness \\
+            Severe Wet        & $\geq 1.5$        & $\geq 1.5$           & Flooding risk or excessive rainfall \\
+            \bottomrule
+        \end{tabular}
+    \label{tbl:discretisation}
 \end{table}
+TODO: This table is likely to change...
 
 \section{Model Development}
 \subsection{Model Design}
@@ -157,7 +163,7 @@ The following factorisation is possible due to Assumption~\ref{item:assumption_3
 The DNBC is fully specified by three sets of parameters, that being the prior, transition and emission probabilities. 
 
 \paragraph{Prior Probabilities:}  
-The initial distribution over the latent drought $S_1$. \\
+The initial distribution over the latent drought state $S_1$. \\
 The factor table for the priors is show below in Table~\ref{tbl:priors_factor_table}:
 \begin{table}[!h]
     \mytable
@@ -179,7 +185,7 @@ where $\pi_i$ is the probability that the system begins in state $i$.
 \]
 
 \paragraph{Transition Probabilities:}  
-defines the likelihood of moving to a new hidden state given the current hidden state. \\
+Defines the likelihood of moving to a new hidden state given the current hidden state. \\
 The factor table as well as the transition matrix $P^1$ is shows below in Table~\ref{tbl:transition_factor_table}:
 
 \begin{table}[!h]
@@ -216,10 +222,11 @@ Here, $a_{i,j}$ represents the probability of transitioning from state $i$ at ti
 \[
 a_{i,j} \equiv p(S_{t+1} = j \mid S_t = i).
 \]
-Note as well that transition matrix's rows sum to $1$, ie. $\sum_{j=1}^m a_{i,j} = 1$ for all $i$.  
+Note as well that the transition matrix's rows sum to $1$, ie. $\sum_{j=1}^m a_{i,j} = 1$ for all $i$.  
 
+\newpage
 \paragraph{Emission Probabilities:}  
-Defines the likelihood of observing a particular inout variable, given that the system is in a specific hidden state. \\
+Defines the likelihood of observing a particular input variable, given that the system is in a specific hidden state. These parameters encode how the drought indicators behave under each latent drought state.  \\
 Once again, the factor table for the emission probabilities is show below in Table~\ref{tbl:emission_factor_table}
 \begin{table}[!h]
     \mytable
@@ -239,12 +246,12 @@ Once again, the factor table for the emission probabilities is show below in Tab
     \label{tbl:emission_factor_table}
 \end{table}
 
-Where, $b_i^{(n)}(j)$ is the likelihood of observing input variable $n$ take on the value $j$, given the its corresponding hidden drought state is equal to $i$
+Where, $b_i^{(n)}(j)$ is the likelihood of observing input variable $n$ take on the value $j$, given that its corresponding hidden drought state is equal to $i$
 \[
 b_i^{(n)}(j) \equiv p(A_t^{(n)} = j \mid S_t = i).
 \]
 
-These parameters encode how the drought indicators behave under each latent drought state.  
+
 Taken together, the parameter set fully determines the DNBC. It is important to note that due to the parameters being time independent, as the model assumes stationarity, the rules governing drought state transitions and emissions are invariant across time.
 
 \subsection{Inference}
@@ -259,15 +266,14 @@ This will later be used for the E-step in the EM algorithm.
 The inference procedure is carried out using the Junction Tree (JT) framework, which provides exact inference. Messages are propagated through the tree, beginning at the leaf clusters and moving inward~\cite{lauritzen1988local}. \\
 Figure~\ref{fig:jt_diagram} illustrates the JT structure associated with the DNBC.
 
-\begin{figure}[!h]
+\begin{figure}[H]
     \centering
     \includegraphics[width=\linewidth]{jt-diagram.png}
     \caption{Junction Tree representation of the DNBC. Each cluster groups together latent state variables and observed attributes, with sepsets defined along the edges. Messages are propagated through the tree to perform exact inference.}
     \label{fig:jt_diagram}
 \end{figure}
-It is useful to note the factorisation of the observed attribute RVs at Equation~\ref{eqn:attribute_rv_factorisation}.
 
-The cluster potentials are summarised in Table~\ref{tbl:cluster_potentials}.
+It is useful to note the factorisation of the observed attribute RVs at Equation~\ref{eqn:attribute_rv_factorisation}. The cluster potentials are summarised in Table~\ref{tbl:cluster_potentials}.
 \begin{table}[!h]
     \mytable
     \caption{Cluster potentials for the DNBC. Each potential corresponds either to a state transition or to a state-attribute relationship.}
@@ -562,11 +568,30 @@ The \texttt{modelSelection} function evaluated different values of the hyperpara
     \item Results were exported to CSV files for analysis with Python.
 \end{enumerate}
 
-\subsection{Model Selection \& Output}
+\subsection{Model Output}
 
 The final model outputs were exported in two forms:
 \begin{itemize}
     \item Posterior decoding using the Maximum Posterior Marginal (MPM) rule.
     \item State sequence decoding using the Viterbi algorithm.
 \end{itemize}
-Both outputs were written to CSV files by the \texttt{C++}, then processed and visualised in Python.  
+
+\subsubsection{1. Maximum Posterior Marginal (MPM) rule}
+
+The MPM rule involves computing the point-wise marginal for latent drought state $S_t$:
+\[
+    \hat{s}_t = \underset{s}{\operatorname{argmax}} \;\; p(S_t = s \mid A_{1:T}, \Theta)
+\]
+This is easily obtained using the results from Section~\ref{sec:inference}.
+
+Conceptually, this rule will pick the most likely state, with a confidence attached, at each time step independently. This is particularly useful if the goal is signal labeling. It should be noted that this rule often leads to an unlikely or even impossible state sequence (eg., $S_t \equiv$ Very Wet \|\; $S_{t+1} \equiv$ Very Dry) and thus is only sensible to use when temporal consistency can be ignored. 
+
+\subsubsection{2. Viterbi Algorithm}
+On the other hand, the Viterbi algorithm produces a temporally coherent sequence that respects the state transition dynamics. Mathematically, the Viterbi decoding produces the single most probable joint state sequence:
+\[
+    \vec{s}^* = \underset{\vec{S}_{1:T}}{\operatorname{argmax}} \;\; p(\vec{S}_{1:T}\mid A_{1:T}, \Theta),
+\]
+This decoding provides a more realistic representation of drought progression~\cite{viterbi}.  
+
+\subsubsection{Output Format}
+Both outputs were exported to CSV files by the \texttt{C++} implementation. Post-processing, visualisation, and evaluation of these outputs were performed in Python, enabling comparison with the original input indices and facilitating analysis.
