@@ -46,13 +46,17 @@ void printDomainAttributeRVsDiscerete(
 // Misc
 std::vector<std::string> splitByCharacter(const std::string &inputString,
                                           const char &delimiter);
+double calcLogLik(
+    const size_t T, const std::vector<std::vector<int>> &observedAttributes,
+    const std::vector<double> &priors,
+    const std::vector<std::vector<double>> &transitionProbs,
+    const std::vector<std::vector<std::vector<double>>> &emissionProbs);
 template <typename T>
 std::vector<T> findMaxAlongAxis(const std::vector<std::vector<T>> &inp,
                                 size_t axis = 0);
 template <typename T>
 std::vector<T> createRandomVector(const size_t vecSize, const T mean = 0,
                                   const T variance = 1);
-
 // ==================== File Handling ====================
 // Input
 std::vector<std::vector<int>> readData(std::string_view filePath,
@@ -118,13 +122,14 @@ std::pair<ClusterGraph, std::map<Idx2, rcptr<Factor>>> performLBU_LTRIP(
     const std::vector<std::vector<int>> &observedAttributes);
 std::tuple<std::vector<double>, std::vector<std::vector<double>>,
            std::vector<std::vector<std::vector<double>>>>
-runModel(const size_t m,
-         const std::vector<std::vector<int>> &observedAttributes,
-         const size_t maxIters, std::string_view outputDir, const bool debug);
+runEM(const size_t m, const std::vector<std::vector<int>> &observedAttributes,
+      const size_t maxIters, const double epsilon, std::string_view outputDir,
+      const bool debug);
 
 void modelSelection(const std::vector<std::vector<int>> &observedAttributes,
                     const std::pair<size_t, size_t> &mRange,
-                    const size_t maxEMIters, const size_t numRestartIters,
+                    const size_t maxEMIters, const double epsilon,
+                    const size_t numRestartIters,
                     std::string_view outputPathCSV, const bool debug);
 
 std::pair<std::vector<int>, double> viterbi(
@@ -148,14 +153,31 @@ int main(int, char *argv[]) {
         std::cout << "emdw things are done...\n\n\n\n\n";
 
         bool DEBUG = true;
-        size_t maxIters = 10;
-        size_t m = 7;
+
+        bool isRealInput = true;
+        size_t maxIters = 200;
+        double epsilon = 1 * std::pow(10, -4);
+        std::cout << epsilon << '\n';
+
+        // If `true` then runs the model with given `m`
+        // If `false` then sweeps `m` and saves model selection metrics
+        bool runModelSelection = false;
+        size_t m = 5;
 
         //*********************************************************
         // Load In Data
         // *********************************************************
         // Specify CSV Path
-        std::string inpPathCSV = "../../../data/synthetic/test.csv";
+
+        std::string inpPathCSV;
+        std::string outputDir;
+        if (isRealInput) {
+            inpPathCSV = "../../../data/real/inp.csv";
+            outputDir = "../../../data/real/";
+        } else {
+            inpPathCSV = "../../../data/synthetic/test.csv";
+            outputDir = "../../../data/synthetic/";
+        }
 
         // Load Data
         debugPrint(DEBUG,
@@ -171,15 +193,12 @@ int main(int, char *argv[]) {
         // Print Attributes
         if (DEBUG) print2DArray(observedAttributes);
 
-        // modelSelection(observedAttributes, std::make_pair(3, 10),
-        // maxIters, 10,
-        //                "../../../data/synthetic/modelSelection.csv",
-        //                DEBUG);
-
-        // return 0;
-
-        runModel(m, observedAttributes, maxIters, "../../../data/synthetic/",
-                 DEBUG);
+        if (runModelSelection)
+            modelSelection(observedAttributes, std::make_pair(1, 8), maxIters,
+                           epsilon, 10, outputDir + "modelSelection.csv",
+                           DEBUG);
+        else
+            runEM(m, observedAttributes, maxIters, epsilon, outputDir, DEBUG);
 
         return 0;  // tell the world that all is fine
     }  // try
@@ -1090,7 +1109,7 @@ std::pair<ClusterGraph, std::map<Idx2, rcptr<Factor>>> performLBU_LTRIP(
     // ==================== The Rest Is Just Copied ====================
 
     // Create Clustergraph
-    ClusterGraph cg(ClusterGraph::LTRIP, factorsVector, observedData);
+    ClusterGraph cg(ClusterGraph::JTREE, factorsVector, observedData);
     /* std::cout << cg << std::endl; */
 
     // export the graph to graphviz .dot format
@@ -1128,9 +1147,9 @@ std::pair<ClusterGraph, std::map<Idx2, rcptr<Factor>>> performLBU_LTRIP(
  */
 std::tuple<std::vector<double>, std::vector<std::vector<double>>,
            std::vector<std::vector<std::vector<double>>>>
-runModel(const size_t m,
-         const std::vector<std::vector<int>> &observedAttributes,
-         const size_t maxIters, std::string_view outputDir, const bool debug) {
+runEM(const size_t m, const std::vector<std::vector<int>> &observedAttributes,
+      const size_t maxIters, const double epsilon, std::string_view outputDir,
+      const bool debug) {
     //*********************************************************
     // Specify Parameters
     // *********************************************************
@@ -1277,6 +1296,8 @@ runModel(const size_t m,
 
     // ==================== Initialise Loop Params ====================
     size_t numIter = 1;
+    double oldLogLik = -std::numeric_limits<double>::max();
+
     // Timer
     auto startEM = std::chrono::high_resolution_clock::now();
     auto endEM = std::chrono::high_resolution_clock::now();
@@ -1289,7 +1310,6 @@ runModel(const size_t m,
         auto &[cg, msgs] = outp;
 
         // ================ Parameter Update (M-Step) ================
-
         // Cache marginals to avoid redundant queries
         std::vector<rcptr<Factor>> marginalCache(T);
         for (size_t t = 0; t < T; t++) {
@@ -1419,6 +1439,15 @@ runModel(const size_t m,
                     "Update Rule For Emission Probs Failed...");
         }
 
+        // ==================== Calc Log-Likelihood ====================
+        double newLogLik = calcLogLik(T, observedAttributes, newPriors,
+                                      newTransitionMatrix, newEmissionProbs);
+
+        // Relative Convergence Criteria By Bishop
+        double relativeLogLikImprovement =
+            std::abs(oldLogLik - newLogLik) / std::abs(oldLogLik);
+        oldLogLik = newLogLik;
+
         // ================== Print Loop Information ==================
 
         if (debug) {
@@ -1431,6 +1460,9 @@ runModel(const size_t m,
 
             // TODO: Make a print function for emission probabilities
             std::cout << "Not printing emission probs...\n";
+            std::cout << "Log-Likelihood: " << newLogLik << '\n';
+            std::cout << "\tRelative increase: " << relativeLogLikImprovement
+                      << '\n';
 
             std::cout << "------------------------\n\n";
         }
@@ -1442,7 +1474,12 @@ runModel(const size_t m,
 
         // ============= Iterate Loop & Exit Condition =============
         numIter += 1;
-        if (numIter > maxIters) {
+
+        // Relative Convergence Criteria By Bishop
+        bool exitNow =
+            (numIter > maxIters || (relativeLogLikImprovement < epsilon));
+
+        if (exitNow) {
             // End Timer
             endEM = std::chrono::high_resolution_clock::now();
 
@@ -1503,7 +1540,8 @@ runModel(const size_t m,
  */
 void modelSelection(const std::vector<std::vector<int>> &observedAttributes,
                     const std::pair<size_t, size_t> &mRange,
-                    const size_t maxEMIters, const size_t numRestartIters,
+                    const size_t maxEMIters, const double epsilon,
+                    const size_t numRestartIters,
                     std::string_view outputPathCSV, const bool debug) {
     size_t T = observedAttributes.size();
     size_t N = observedAttributes.at(0).size();
@@ -1524,63 +1562,17 @@ void modelSelection(const std::vector<std::vector<int>> &observedAttributes,
             debugPrint(debug, "=============== m = " + std::to_string(m) +
                                   " | r =" + std::to_string(r + 1) +
                                   " ===============");
-            auto [priors, transitionProbs, emissionProbs] =
-                runModel(m, observedAttributes, maxEMIters, "None", false);
+            auto [priors, transitionProbs, emissionProbs] = runEM(
+                m, observedAttributes, maxEMIters, epsilon, "None", false);
 
-            // ================== Calculate Log-Likelihood
-            // ================== p(\vec{A}_t | S_t = i)
-            //  - Working in log-space, and will simply exec
-            //  exp(log(p(...)))
-            //      if I want to use it
-            std::vector<std::vector<double>> log_pAgSi(
-                T, std::vector<double>(m, 0.0));
-            for (size_t t = 0; t < T; t++) {
-                for (size_t i = 0; i < m; i++) {
-                    for (size_t n = 0; n < N; n++) {
-                        // Here we populating CnVals but only on very first
-                        // iter
-                        if (m == mRange.first && r == 0) {
-                            CnVals[n] = emissionProbs.at(n).size();
-                        }
-                        int obs = observedAttributes.at(t).at(n);
-                        double p = emissionProbs.at(n).at(obs - 1).at(i);
-                        log_pAgSi[t][i] += std::log(p);
-                    }
-                }
+            // Here we populating CnVals but only on very first iter
+            if (m == mRange.first && r == 0) {
+                for (size_t n = 0; n < N; n++)
+                    CnVals[n] = emissionProbs.at(n).size();
             }
 
-            // Forward Algorithm With Scaling
-            std::vector<std::vector<double>> alpha(T,
-                                                   std::vector<double>(m, 0.0));
-            std::vector<double> c(T, 0.0);  // scaling constants
-
-            // compute alpha_1
-            for (size_t i = 0; i < m; i++) {
-                alpha[0][i] = priors.at(i) * std::exp(log_pAgSi[0][i]);
-                c[0] += alpha[0][i];
-            }
-            // normalize
-            for (size_t i = 0; i < m; i++) alpha[0][i] /= c[0];
-
-            // recursion
-            for (size_t t = 1; t < T; t++) {
-                for (size_t j = 0; j < m; j++) {
-                    double sum_prev = 0.0;
-                    for (size_t i = 0; i < m; i++) {
-                        sum_prev +=
-                            alpha.at(t - 1).at(i) * transitionProbs.at(i).at(j);
-                    }
-                    alpha[t][j] = sum_prev * exp(log_pAgSi.at(t).at(j));
-                }
-                // scale
-                for (size_t j = 0; j < m; j++) c[t] += alpha.at(t).at(j);
-                for (size_t j = 0; j < m; j++) alpha[t][j] /= c.at(t);
-            }
-
-            // log-likelihood = - sum(log(c[t]))
-            double logLik = 0.0;
-            for (size_t t = 0; t < T; t++) logLik += std::log(c.at(t));
-
+            double logLik = calcLogLik(T, observedAttributes, priors,
+                                       transitionProbs, emissionProbs);
             debugPrint(debug, "Log-Likelihood = " + std::to_string(logLik));
             if (logLik > maxLogLik) {
                 maxLogLik = logLik;
@@ -1620,7 +1612,8 @@ void modelSelection(const std::vector<std::vector<int>> &observedAttributes,
  * @param
  *  - `logPriors`: log of our final prior probabilities
  *  - `logTrans`: log of our final transition matrix
- *  - `logEmit`: log P(A_t | S_t = j), factorisation of across all N attributes
+ *  - `logEmit`: log P(A_t | S_t = j), factorisation of across all N
+ * attributes
  * @return
  *  - A pair where
  *      - first: vector of length T, giving the most probable state at each
@@ -1692,4 +1685,60 @@ std::pair<std::vector<int>, double> viterbi(
     }
 
     return {best_path, best_log_prob};
+}
+
+double calcLogLik(
+    const size_t T, const std::vector<std::vector<int>> &observedAttributes,
+    const std::vector<double> &priors,
+    const std::vector<std::vector<double>> &transitionProbs,
+    const std::vector<std::vector<std::vector<double>>> &emissionProbs) {
+    size_t m = priors.size();
+    size_t N = emissionProbs.size();
+
+    // ================= Calculate Log-Likelihood =================
+    // p(\vec{A}_t | S_t = i)
+    //  - Working in log-space, and will simply exec
+    //      exp(log(p(...))) if I want to use it
+    std::vector<std::vector<double>> log_pAgSi(T, std::vector<double>(m, 0.0));
+    for (size_t t = 0; t < T; t++) {
+        for (size_t i = 0; i < m; i++) {
+            for (size_t n = 0; n < N; n++) {
+                int obs = observedAttributes.at(t).at(n);
+                double p = emissionProbs.at(n).at(obs - 1).at(i);
+                log_pAgSi[t][i] += std::log(p);
+            }
+        }
+    }
+
+    // Forward Algorithm With Scaling
+    std::vector<std::vector<double>> alpha(T, std::vector<double>(m, 0.0));
+    std::vector<double> c(T, 0.0);  // scaling constants
+
+    // compute alpha_1
+    for (size_t i = 0; i < m; i++) {
+        alpha[0][i] = priors.at(i) * std::exp(log_pAgSi[0][i]);
+        c[0] += alpha[0][i];
+    }
+    // normalize
+    for (size_t i = 0; i < m; i++) alpha[0][i] /= c[0];
+
+    // recursion
+    for (size_t t = 1; t < T; t++) {
+        for (size_t j = 0; j < m; j++) {
+            double sum_prev = 0.0;
+            for (size_t i = 0; i < m; i++) {
+                sum_prev += alpha.at(t - 1).at(i) * transitionProbs.at(i).at(j);
+            }
+            alpha[t][j] = sum_prev * exp(log_pAgSi.at(t).at(j));
+        }
+        // scale
+        for (size_t j = 0; j < m; j++) c[t] += alpha.at(t).at(j);
+        for (size_t j = 0; j < m; j++) alpha[t][j] /= c.at(t);
+    }
+
+    // log-likelihood = - sum(log(c[t]))
+    double logLik = 0.0;
+    for (size_t t = 0; t < T; t++) logLik += std::log(c.at(t));
+
+    return logLik;
 }

@@ -15,20 +15,32 @@ import pandas as pd
 
 def save_dataframe(df: pd.DataFrame, csv_path: str, debug=False):
     """
-    Save DataFrame to a CSV file.
-    
+    Save DataFrame to a CSV file, creating directories if needed.
+
     Args:
         df: DataFrame to save
         csv_path: Path where CSV file will be saved
-    
+        debug: Whether to print debug information
+
     Returns:
         None
     """
 
+    # Extract directory path from the full file path
+    directory = os.path.dirname(csv_path)
+
+    # Create directories if they don't exist
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+        if debug:
+            print(f"Created directory: `{directory}`")
+
+    # Save the DataFrame
     df.to_csv(csv_path, index=False)
 
     if debug:
         print(f"Saved CSV to: `{csv_path}`")
+
 
 def split_date_range(start_date: datetime, end_date: datetime, max_years=20):
     start = start_date.date()
@@ -73,7 +85,7 @@ def check_valid_region(region_code: str):
         "E",
         "F",
         "G",
-        "G",
+        "H",
         "J",
         "K",
         "L",
@@ -103,6 +115,8 @@ def scrape_river_stations(region_code: str):
 
     print(f"Region Code is Valid, Getting river stations in area {region_code}...")
     target_link = f"https://www.dws.gov.za/hydrology/Verified/HyStations.aspx?Region={region_code}&StationType=rbRiver"
+    print(target_link)
+    return
 
     r = re.get(target_link)
 
@@ -145,7 +159,7 @@ def scrape_river_stations(region_code: str):
 
         stations.append(station_info)
 
-    save_dir = f"./data/station_data/river/daily/region_{region_code}.json"
+    save_dir = f"./data/station_data/river/region_{region_code}.json"
     print(f"Scraped station data for region {region_code}, now saving to {save_dir}")
 
     # Create parent directories
@@ -195,7 +209,6 @@ def scrape_all_station_metadata():
         scrape_river_stations(code)
 
 
-
 def text_to_dataframe(raw_text):
     """Convert raw text to DataFrame with proper error handling"""
     lines = raw_text.split("\n")
@@ -219,7 +232,7 @@ def text_to_dataframe(raw_text):
     return pd.DataFrame(processed_data)
 
 
-def scrape_stream_flow(station_code: str, start_date=None, end_date=None):
+def scrape_stream_flow(station_code: str, start_date=None, end_date=None, silent=False):
     # Ensure given station_code is in a region that is valid
     station_code = check_valid_region(station_code[0]) + station_code[1:]
 
@@ -237,7 +250,8 @@ def scrape_stream_flow(station_code: str, start_date=None, end_date=None):
     if station_meta_data is None:
         raise ValueError(f"Given Station: {station_code}, was not found.")
 
-    print(f"Station {station_code} Metadata Found")
+    if not silent:
+        print(f"Station {station_code} Metadata Found")
 
     # Get available data dates
     available_data_start = datetime.strptime(
@@ -258,14 +272,16 @@ def scrape_stream_flow(station_code: str, start_date=None, end_date=None):
         start_date = datetime.strptime(start_date, "%Y-%m-%d")
 
         if available_data_start > start_date:
-            print(
-                f"Available Data begins @ {available_data_start.strftime('%Y-%m-%d')}, which is after given date: {start_date.strftime('%Y-%m-%d')}. Therefore getting data from {available_data_start.strftime('%Y-%m-%d')} onwards"
-            )
+            if not silent:
+                print(
+                    f"Available Data begins @ {available_data_start.strftime('%Y-%m-%d')}, which is after given date: {start_date.strftime('%Y-%m-%d')}. Therefore getting data from {available_data_start.strftime('%Y-%m-%d')} onwards"
+                )
             start_date = available_data_start
     else:
-        print(
-            f"No start date given, therefore scraping from the very beginning: {available_data_start.strftime('%Y-%m-%d')}"
-        )
+        if not silent:
+            print(
+                f"No start date given, therefore scraping from the very beginning: {available_data_start.strftime('%Y-%m-%d')}"
+            )
         start_date = available_data_start
     # Check if given dates are a valid format and within range of station available data (given they are not none)
     if end_date is not None:
@@ -301,6 +317,7 @@ def scrape_stream_flow(station_code: str, start_date=None, end_date=None):
 
         print(f"Processing period: {period_start} to {period_end}")
         data_link = f"https://www.dws.gov.za/hydrology/Verified/HyData.aspx?Station={station_code}100.00&DataType=Daily&StartDT={period_start}&EndDT={period_end}&SiteType=RIV"
+
         r = re.get(data_link)
 
         if not check_valid_response(r):
@@ -320,10 +337,8 @@ def scrape_stream_flow(station_code: str, start_date=None, end_date=None):
     os.makedirs(os.path.dirname(save_dir), exist_ok=True)
     all_data.to_csv(save_dir, index=False)
     print(
-        f"Successfully saved stream flow data for station {station_code} from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} @ {save_dir}"
+        f"✓ Successfully saved stream flow data for station {station_code} from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} @ {save_dir}"
     )
-
-    pass
 
 
 def assess_data(df: pd.DataFrame):
@@ -351,7 +366,6 @@ def assess_data(df: pd.DataFrame):
 
 
 def average_data(daily_data_dir: str):
-
     print(f"Averaging dialy data from `{daily_data_dir}`")
     df = pd.read_csv(daily_data_dir)
 
@@ -411,18 +425,22 @@ def calc_sdi(df, k=3):
     std_Vk = df[f"V_{k}"].std(skipna=True)
 
     # Standardize
-    df[f"SDI_{k}"] = (df[f"V_{k}"] - mean_Vk) / std_Vk
+    df[f"SDI"] = (df[f"V_{k}"] - mean_Vk) / std_Vk
+
+    # rename
+    df.rename(columns={"YEAR": "year", "MONTH": "month"}, inplace=True)
 
     return df
+
 
 def apply_filters(df: pd.DataFrame, filters: list):
     """
     Apply multiple boolean conditions to filter a DataFrame.
-    
+
     Args:
         df: Input DataFrame to filter
         filters: List of boolean conditions (e.g., [df['col'] > 0, df['col2'] == 'value'])
-    
+
     Returns:
         Filtered DataFrame with rows satisfying all conditions
     """
@@ -434,18 +452,97 @@ def apply_filters(df: pd.DataFrame, filters: list):
 
     return outp_df
 
+
+def scrape_area(region_code):
+    # Validate the code
+    region_code = check_valid_region(region_code)
+
+    # Extract all stations
+
+    with open(f"./data/station_data/river/region_{region_code}.json", "r") as file:
+        station_data = json.load(file)
+
+    directory_path = (
+        "./data/stream_flow_data/daily/"  # Replace with your directory path
+    )
+
+    # Get all entries (files and directories)
+    all_entries = os.listdir(directory_path)
+
+    # Filter for only files
+    files_only = [
+        entry
+        for entry in all_entries
+        if os.path.isfile(os.path.join(directory_path, entry))
+    ]
+
+    faulty_stations = ["G2H013"]
+    new_faulty_stations = []
+
+    csv_files = [item[:-4] for item in files_only]
+    for station in station_data:
+        # print(station["code"])
+        station_code = station["code"]
+        if station_code in csv_files:
+            continue
+
+        if station_code in faulty_stations:
+            continue
+
+        run = True
+        counter = 0
+        while run:
+            try:
+                scrape_stream_flow(station_code, silent=True)
+            except Exception as e:
+                counter += 1
+                print(f"{station_code} IS FAULTY FOR THE {counter} TIME....")
+                if counter >= 10:
+                    new_faulty_stations.append(station_code)
+                    run = False
+            else:
+                run = False
+        print()
+
+    if len(new_faulty_stations) > 0:
+        print("New Faulty Stations:")
+        for station in new_faulty_stations:
+            print(station)
+
+
 def main():
-    # ==================== Pick CSV File ====================
+
+    # data = pd.read_csv("./data/stream_flow_data/monthly/B1H012.csv")
+    # print(data.head())
+    # return
+    # scrape_river_stations("H")
+    # return
+
+    # ==================== Scrape All Stations In Area ====================
+
+    # scrape_area("K")
+    # return
+
+    # ==================== Scrape Station ====================
+    # scrape_stream_flow("G2H040")
+    # return
+
+    # ==================== Convert Daily Streamflow To Monthly Streamflow ====================
+    # average_data("./data/stream_flow_data/daily/B1H012.csv")
+    # return
+
+    # ==================== Calculate SDI From Monthly Data ====================
+    # Pick CSV File
     data_file = "./data/stream_flow_data/monthly/B1H012.csv"
 
-    # ==================== Extract Data ====================
+    # Extract Data
     df = pd.read_csv(data_file)
 
-    # ==================== Calc SDI ====================
+    # Calc SDI
     sdi_df = calc_sdi(df)
-    print(sdi_df)
 
-    save_dataframe(sdi_df, "./../combine_indices/data/sdi.csv", debug=True)
+    # Save Data
+    save_dataframe(sdi_df, "./data/sdi_data/sdi.csv", debug=True)
     return
 
     # ==================== Applying Filters Example ====================

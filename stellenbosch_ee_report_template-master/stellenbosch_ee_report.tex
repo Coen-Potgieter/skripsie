@@ -25,12 +25,12 @@
 \def\l@chapter#1#2{\originall@chapter{{\sffamily #1}}{#2}}
 \makeatother
 
-%% Alternative headings using small-caps (comment out the top section)
-%\usepackage[raggedright,bf]{titlesec}
-%\usepackage[margin=\the\parindent,small,bf]{caption}
-%\titlelabel{\thetitle.\ }
-%\titleformat{\chapter}[display]{\huge\scshape}{\chaptertitlename\ \thechapter}{15pt}{\Huge \raggedright}
-%\titlespacing*{\chapter}{0pt}{0pt}{40pt}  % remove spacing before chapter headings
+% Alternative headings using small-caps (comment out the top section)
+\usepackage[raggedright,bf]{titlesec}
+\usepackage[margin=\the\parindent,small,bf]{caption}
+\titlelabel{\thetitle.\ }
+\titleformat{\chapter}[display]{\huge\scshape}{\chaptertitlename\ \thechapter}{15pt}{\Huge \raggedright}
+\titlespacing*{\chapter}{0pt}{0pt}{40pt}  % remove spacing before chapter headings
 
 % Table of contents
 \let \savenumberline \numberline
@@ -105,6 +105,11 @@
 \patchcmd{\ttlh@hang}{\noindent}{}{}{}
 \makeatother
 
+% Misc Packages & Commands
+\usepackage{enumitem}
+\usepackage{url} % Hopefully no line breaks on my urls...
+\newcommand\numberthis{\addtocounter{equation}{1}\tag{\theequation}}
+
 
 \begin{document}
 
@@ -124,6 +129,9 @@
 
 % Contents
 \input{introduction/introduction}
+\input{literature/literature}
+\input{methods/methods}
+\input{results/results}
 \input{body/body}
 \input{conclusion/conclusion}
 

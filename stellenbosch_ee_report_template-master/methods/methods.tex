@@ -1,0 +1,572 @@
+\graphicspath{{methods/fig/}}
+
+% TODO: DO THIS: Add implementation here as well like discretisation or whatever the fuck
+\chapter{Methods}
+\label{chap:methods}
+\section{Data Acquisition}
+The development of a composite drought indicator requires careful selection of input variables that capture the different aspects of drought. Three indices were selected: the Standardised Precipitation Index (SPI) to represent meteorological drought, the Streamflow Drought Index (SDI) to represent hydrological drought, and the Normalised Difference Vegetation Index (NDVI) as a proxy for agricultural drought. These indices were chosen based on their widespread use in literature and the availability of data. Data scarcity is a challenge in South Africa, as openly accessible, long and consistent drought-related datasets are limited. Consequently, the choice of indices attempts to strike a balance between theory and pragmatic constraints~\ref{za_drought_review,za_drought_review2,dnbc_drought_first,dnbc_drought_second}.
+
+\ref{za_drought_review}
+
+
+\subsection{Sources}
+To compute the SPI, monthly rainfall data was obtained from the University of Cape Town (UCT) dataset, which covers the period 1979–2019 (Dataset~\ref{uct_data}). The dataset provides rainfall values at the station level, offering a high degree of spatial granularity across South Africa.
+
+For the SDI, daily streamflow records were obtained from the Department of Water and Sanitation (DWS), which maintains audited historic data regarding hydrology (Dataset~\ref{DWS_2011}). These daily records were averaged to monthly to calculate the target index.
+
+To obtain the NDVI, the NOAA Climate Data Record (CDR) of AVHRR Normalised Difference Vegetation Index (NDVI), Version~5 was used (Dataset~\ref{ndvi_data}). The dataset spans the period 1981–2025 and is provided in global NetCDF format. For the purposes of this study, only the South African subset was extracted. This required targeted downloading and filtering, given the large size of the global dataset.
+
+\subsection{Preprocessing}
+
+
+To prepare the indices for model input, several preprocessing steps were performed:  
+\begin{enumerate}
+    \item \textbf{Time Period Alignment:} All datasets were resampled or aggregated to a common monthly resolution.  
+    \item \textbf{Area Alignment:} For station-based datasets, like rainfall and streamflow, records were harmonised by selecting stations with consistent temporal coverage. For NDVI, gridded data was averaged over the area of choice. 
+    \item \textbf{Brief Exploration Of Data:} The data sets were analysed to identify and issues in the data such as missing/null values, format consistency, validity, etc. No problems were found
+\end{enumerate}
+
+\section{Index Calculation}
+\label{sec:index-calc}
+
+The selected datasets were subsequently transformed into drought indices using established methodologies. The SPI was derived from rainfall anomalies through standardisation against a long-term climatology. The SDI was computed by standardising streamflow anomalies relative to long-term hydrological records. The NDVI, while not a drought index in its raw form, was used to reflect vegetation stress associated with agricultural drought conditions. References to the seminal works underlying these methodologies are provided in the bibliography.
+
+\subsection{SPI}
+
+The SPI is based on the statistical normalisation of accumulated precipitation over a specified time window. Precipitation values are first fitted to a probability distribution, commonly the gamma distribution, and then transformed into a standard normal distribution. This yields an index with mean zero and unit variance, allowing for direct interpretation of drought severity across different temporal scales.
+
+\subsection{SDI}
+
+The SDI extends the concept of the SPI to streamflow. It is calculated by aggregating streamflow over a specified time window and standardising it against long-term flow records. Positive values of SDI indicate above-normal hydrological conditions, while negative values reflect hydrological drought. The SDI is particularly relevant in South Africa, where surface water storage and river systems play a critical role in drought impact and management.
+
+\subsection{NDVI}
+
+The NDVI is derived from remotely sensed reflectance in the red and near-infrared bands of the electromagnetic spectrum. Vegetated surfaces typically absorb red light for photosynthesis and reflect near-infrared light, making the NDVI an effective indicator of vegetation health. While NDVI is not a drought index per se, reductions in NDVI are widely used to monitor agricultural drought stress, as vegetation is sensitive to deficits in soil moisture and precipitation.
+
+\subsection{Discretisation of Indices}
+
+The SPI, SDI, and NDVI are all continuous variables. However, the Dynamic Naïve Bayes Classifier requires discrete inputs. Accordingly, each index was discretised into categorical bins based on thresholds reported in the literature and common practice. For example, SPI values are often classified into categories such as “extremely dry,” “moderately dry,” and “normal.” This discretisation not only facilitates model implementation but also aligns with the interpretive categories commonly employed in drought monitoring. A more detailed account of the discretisation procedure is provided in Section~\ref{sec:implementation}.
+
+\begin{table}[h]
+\centering
+\caption{Discretisation thresholds for drought indices.}
+\label{tab:discretisation}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Category} & \textbf{SPI / SDI} & \textbf{NDVI Anomaly} & \textbf{Interpretation} \\
+\midrule
+Severe Drought    & $\leq -1.5$        & $\leq -1.5$          & Extreme vegetation/hydrological stress \\
+Moderate Drought  & $-1.5 < x \leq -0.5$ & $-1.5 < x \leq -0.5$ & Sustained but moderate deficit \\
+Normal            & $-0.5 < x < 0.5$  & $-0.5 < x < 0.5$     & Near-average conditions \\
+Moderate Wet      & $0.5 \leq x < 1.5$ & $0.5 \leq x < 1.5$   & Above-average moisture/greenness \\
+Severe Wet        & $\geq 1.5$        & $\geq 1.5$           & Flooding risk or excessive rainfall \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Model Development}
+\subsection{Model Design}
+
+\subsubsection{Defining the Random Variables}
+
+The proposed DNBC is constructed in a general form with $N$ input variables observed across $T$ discrete time steps. All random variables (RVs) in the model are treated as discrete.  
+
+The first set of RVs corresponds to the latent drought states at each time step, denoted by
+\[
+S_t \in \{1,2,\dots,m\}, \quad t = 1, \dots, T,
+\]
+where $m$ represents the number of possible drought states. This value of $m$ is not fixed, but will rather be determined via model selection.  
+
+The second set of RVs corresponds to the observed input variables, denoted by
+\[
+A_t^{(n)} \in \{1,2,\dots,C_n\}, \quad n = 1, \dots, N, \quad t = 1, \dots, T,
+\]
+where $C_n$ is the cardinality of the $n$-th input variable. In this project, these inputs are the indices used to represent different aspects of drought:
+\[
+\text{SPI} \equiv A_t^{(1)}, \quad 
+\text{SDI} \equiv A_t^{(2)}, \quad 
+\text{NDVI} \equiv A_t^{(3)}.
+\]
+These observed indices constitute the data set $\mathcal{D}$.  
+
+For clarity, we define the following notation which will be used throughout the model formulation:
+\[
+\vec{S}_{1:T} = \{S_1, S_2, \dots, S_T\}, \quad 
+A_{1:T} = \{\vec{A}_1, \vec{A}_2, \dots, \vec{A}_T\},
+\]
+where each $\vec{A}_t = \{A_t^{(1)}, A_t^{(2)}, \dots, A_t^{(N)}\}$.  
+
+The total number of latent state nodes is therefore $T$, while the number of observed input nodes is $T \times N$. A summary of the random variables, their number of nodes, and their cardinality is provided in Table~\ref{tab:RVs}.
+
+\begin{table}[H]
+\centering
+\caption{Summary of random variables in the model}
+\label{tab:RVs}
+\begin{tabular}{lcc}
+\hline
+\textbf{Name} & \textbf{Number of Nodes} & \textbf{Cardinality} \\ \hline
+Latent drought state $S_t$ & $T$ & $m$ \\
+General input variable $A_t^{(n)}$ & $T \times N$ & $C_n$ \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Graphical Structure \& Assumptions}
+
+Figure~\ref{fig:dnbc-diagram} below displays the model diagram for a DNBC for $T$ time steps and $N$ input variables.  
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=\linewidth]{dnbc-diagram.png}
+    \caption[TODO]{
+The Dynamic Naïve Bayes Classifier (DNBC) can be represented as a Bayesian network unfolding over time. At each time step $t$, a latent drought state $S_t$ is modelled as a discrete random variable that governs the latent structure, while the observed input variables $\vec{A}_t = \{A_t^{(1)}, A_t^{(2)}, \dots, A_t^{(N)}\}$ are each solely dependent on $S_t$}
+    \label{fig:dnbc-diagram}
+\end{figure}
+
+It is important to note the inherent limitations of this model, that being:
+\begin{enumerate}[label=(\roman*)]
+    \item The dynamic process of the state sequence $S_t$ follows a first-order Markov chain. This means the state at time $t+1$ is conditionally dependent only on the state at time $t$. \label{item:assumption_1}
+    \item The dynamic process is stationary, implying that the transition probabilities between states are constant over time. \label{item:assumption_2}
+    \item For each time step $t$, the model assumes conditional independence among the input variables $\vec{A}_t$ given the corresponding hidden drought state $S_t$. \label{item:assumption_3}
+\end{enumerate}
+
+\subsubsection{Joint Distribution}
+
+The joint probability distribution of the observed variables and latent states in the DNBC can be expressed as:
+\begin{equation}
+    \begin{align}
+        p(S_1, &S_2, \dots, S_T, A^{(1)}_1, A^{(2)}_1, \dots, A^{(N)}_1, A^{(1)}_2, \dots, A^{(N)}_T) \\ 
+        &= p(S_1, S_2, \dots, S_T, \vec{A}_1, \vec{A}_2, \dots, \vec{A}_T) \\
+        &= p(\vec{S}_{1:T}, A_{1:T}) \\
+        &= p(S_1) \cdot \prod\limits_{t=1}^{T-1} p(S_{t+1} \mid S_t) \cdot \prod\limits_{n=1}^{N} \prod\limits_{t=1}^T p(A^{(n)}_t \mid S_t)
+    \end{align}
+    \label{eqn:joint_distr}
+\end{equation}
+
+The following factorisation is possible due to Assumption~\ref{item:assumption_3} of the DNBC and will become useful at a later stage.
+\begin{equation} 
+    \begin{align} 
+        p(\vec{A}_{t} \mid S_t) &= p(A_t^{(1)}, A_t^{(2)}, \dots, A_t^{(N)} \mid S_t) \\ 
+        &= p(A_t^{(1)} \mid S_t)p(A_t^{(2)} \mid S_t)\dotsp(A_t^{(N)} \mid S_t) \\ 
+        &= \prod\limits_{n=1}^N p(A_t^{(n)} \mid S_t) 
+    \end{align} 
+    \label{eqn:attribute_rv_factorisation} 
+\end{equation}
+
+\subsubsection{Parameterising the Model}
+The DNBC is fully specified by three sets of parameters, that being the prior, transition and emission probabilities. 
+
+\paragraph{Prior Probabilities:}  
+The initial distribution over the latent drought $S_1$. \\
+The factor table for the priors is show below in Table~\ref{tbl:priors_factor_table}:
+\begin{table}[!h]
+    \mytable
+    \caption{Priors Factor Table}
+    \begin{array}{c | c}
+        S_1 & p(S_1) \\ 
+        \hline
+        1 & \pi_1 \\ 
+        2 & \pi_2 \\ 
+        \vdots & \vdots \\
+        m & \pi_m \\ 
+    \end{array} 
+    \label{tbl:priors_factor_table}
+\end{table}
+
+where $\pi_i$ is the probability that the system begins in state $i$. 
+\[
+\pi_i \equiv p(S_1 = i),
+\]
+
+\paragraph{Transition Probabilities:}  
+defines the likelihood of moving to a new hidden state given the current hidden state. \\
+The factor table as well as the transition matrix $P^1$ is shows below in Table~\ref{tbl:transition_factor_table}:
+
+\begin{table}[!h]
+    \mytable
+    \caption{Transition Factor Table \& Transition Matrix}
+        \begin{array}{ccc}
+        \begin{array}{c c | c}
+        S_t & S_{t+1} & p(S_{t+1} \mid S_t) \\ 
+        \hline
+        1 & 1  & a_{1,1} \\ 
+        1 & 2  & a_{1,2} \\ 
+        \vdots & \vdots  & \vdots \\
+        1 & m  & a_{1, m} \\ 
+        2 & 1  & a_{2, 1} \\ 
+        2 & 2  & a_{2, 2} \\ 
+        \vdots & \vdots  & \vdots \\
+        m & m  & a_{m,m} \\ 
+        \end{array} 
+        &
+        \equiv
+        &
+        P^1 = 
+        \begin{bmatrix}
+        a_{1,1} & a_{1,2} & \dots & a_{1,m} \\
+        a_{2,1} & a_{2,2} & \dots & a_{2,m} \\
+        \vdots & \vdots & \ddots & \vdots \\
+        a_{m,1} & a_{m,2} & \dots & a_{m,m} \\
+        \end{bmatrix}
+        \end{array} 
+    \label{tbl:transition_factor_table}
+\end{table}
+
+Here, $a_{i,j}$ represents the probability of transitioning from state $i$ at time $t$ to state $j$ at time $t+1$. 
+\[
+a_{i,j} \equiv p(S_{t+1} = j \mid S_t = i).
+\]
+Note as well that transition matrix's rows sum to $1$, ie. $\sum_{j=1}^m a_{i,j} = 1$ for all $i$.  
+
+\paragraph{Emission Probabilities:}  
+Defines the likelihood of observing a particular inout variable, given that the system is in a specific hidden state. \\
+Once again, the factor table for the emission probabilities is show below in Table~\ref{tbl:emission_factor_table}
+\begin{table}[!h]
+    \mytable
+    \caption{Emission Factor Table}
+        \begin{array}{c c | c}
+        A^{(n)}_t & S_t & p(A^{(n)}_t \mid S_t) \\ 
+        \hline
+        1 & 1  & b_1^{(n)}(1) \\ 
+        1 & 2  & b_2^{(n)}(1) \\ 
+        \vdots & \vdots  & \vdots \\
+        1 & m  & b_m^{(n)}(1) \\ 
+        2 & 1  & b_1^{(n)}(2) \\ 
+        2 & 2  & b_2^{(n)}(2) \\ 
+        \vdots & \vdots  & \vdots \\
+        C_n & m  & b_m^{(n)}(C_n) \\ 
+        \end{array} 
+    \label{tbl:emission_factor_table}
+\end{table}
+
+Where, $b_i^{(n)}(j)$ is the likelihood of observing input variable $n$ take on the value $j$, given the its corresponding hidden drought state is equal to $i$
+\[
+b_i^{(n)}(j) \equiv p(A_t^{(n)} = j \mid S_t = i).
+\]
+
+These parameters encode how the drought indicators behave under each latent drought state.  
+Taken together, the parameter set fully determines the DNBC. It is important to note that due to the parameters being time independent, as the model assumes stationarity, the rules governing drought state transitions and emissions are invariant across time.
+
+\subsection{Inference}
+\label{sec:inference}
+
+In this section, inference for the DNBC is developed under the assumption that the parameters $\Theta$ are known and the input variables $A_{1:T}$ are observed. Since the attributes are not random at this stage, the task becomes trying to infer the distribution of the hidden drought states:
+\[
+    p(\vec{S}_{1:T} \mid A_{1:T}, \Theta),
+\]
+This will later be used for the E-step in the EM algorithm.
+
+The inference procedure is carried out using the Junction Tree (JT) framework, which provides exact inference. Messages are propagated through the tree, beginning at the leaf clusters and moving inward~\cite{lauritzen1988local}. \\
+Figure~\ref{fig:jt_diagram} illustrates the JT structure associated with the DNBC.
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=\linewidth]{jt-diagram.png}
+    \caption{Junction Tree representation of the DNBC. Each cluster groups together latent state variables and observed attributes, with sepsets defined along the edges. Messages are propagated through the tree to perform exact inference.}
+    \label{fig:jt_diagram}
+\end{figure}
+It is useful to note the factorisation of the observed attribute RVs at Equation~\ref{eqn:attribute_rv_factorisation}.
+
+The cluster potentials are summarised in Table~\ref{tbl:cluster_potentials}.
+\begin{table}[!h]
+    \mytable
+    \caption{Cluster potentials for the DNBC. Each potential corresponds either to a state transition or to a state-attribute relationship.}
+    \begin{aligned}[c]
+        &- \\
+        \psi_2(S_1, S_2) &= p(S_2 \mid S_1) \\
+        &\vdots \\
+        \psi_t(S_{t-1}, S_t) &= p(S_t \mid S_{t-1}) \\
+        &\vdots \\
+        \psi_T(S_{T-1}, S_T) &= p(S_T \mid S_{T-1}) \\
+    \end{aligned}
+    \qquad \qquad \qquad
+    \begin{aligned}[c]
+        \psi_1(S_1, \vec{A}_1) &= p(S_1)p(\vec{A}_1 \mid S_1) \\
+        \psi_2(S_2, \vec{A}_2) &= p(\vec{A}_2 \mid S_2) \\
+        &\vdots \\
+        \psi_t(S_t, \vec{A}_t) &= p(\vec{A}_t \mid S_t) \\
+        &\vdots \\
+        \psi_T(S_T, \vec{A}_T) &= p(\vec{A}_T \mid S_T) \\
+    \end{aligned}
+    \label{tbl:cluster_potentials}
+\end{table}
+
+\subsubsection{Message Passing}
+Messages are defined between clusters, with sepsets given by the product of messages between clusters. 
+
+\paragraph{Upward messages:}  
+Because the attributes are observed, upward messages collapse to the corresponding likelihood terms.
+\begin{align*}
+    \delta_{t\uparrow} (S_t) &= \sum\limits_{\vec{A}_t} \psi_t(S_t, \vec{A}_t) \\ 
+    &= \sum\limits_{\vec{A}_t} p(\vec{A}_t \mid S_t) \\
+    &= p(\vec{A}_t \mid S_t)
+\end{align*}
+since marginalisation over the observed attributes reduces to their likelihood.
+
+
+\paragraph{Rightward messages:}  
+Rightward propagation starts at the leftmost cluster and moves forward in time:
+\begin{align*} 
+    \delta_{1 \rightarrow 2} (S_1) &= \sum\limits_{\vec{A}_1} \psi_1(S_1, \vec{A}_1) \\
+    &= \sum\limits_{\vec{A}_1} p(S_1)p(\vec{A}_1 \mid S_1) \\
+    &= p(S_1)p(\vec{A}_1 \mid S_1) \numberthis \label{eqn:rightward_message_init} \\
+    \\
+    \delta_{t \rightarrow t+1} (S_t) &= \sum\limits_{S_{t-1}} \psi_t(S_{t-1}, S_t) \delta_{t-1 \rightarrow t}(S_{t-1}) \delta_{t\uparrow}(S_t) \\
+    &= \sum\limits_{S_{t-1}} p(S_t \mid S_{t-1}) \delta_{{t-1} \rightarrow t}(S_{t-1}) p(\vec{A}_t \mid S_t) \\
+    &= p(\vec{A}_t \mid S_t) \sum\limits_{S_{t-1}} p(S_t \mid S_{t-1}) \delta_{{t-1} \rightarrow t}(S_{t-1}) \numberthis \label{eqn:rightward_message_final} \\
+\end{align*}
+
+\paragraph{Leftward messages.}  
+Similarly, leftward propagation begins at the final cluster and proceeds backward:
+\begin{align*} 
+    \delta_{T-1 \leftarrow T} (S_{T-1}) &= \sum\limits_{S_T} p(S_T \mid S_{T-1})p(\vec{A}_T \mid S_T), \numberthis \label{eqn:leftward_message_init} \\
+    \\
+    \delta_{t-1 \leftarrow t} (S_{t-1}) &= \sum\limits_{S_t} p(S_t \mid S_{t-1}) \delta_{t \leftarrow t+1}(S_t) p(\vec{A}_t \mid S_t). \numberthis \label{eqn:leftward_message_final}
+\end{align*}
+
+\subsubsection{Remarks}
+In this framework, the clusters of primary interest are $\psi_t(S_t, S_{t+1})$ and the sepsets $\mu_{t,t+1}(S_t)$, which directly contribute to the computation of $p(\vec{S}_{1:T} \mid A_{1:T}, \Theta)$. As a result, downward messages (e.g., from $\psi_t(S_{t-1}, S_t)$ to $\psi_t(S_t, \vec{A}_t)$) are not of interest. \\
+Finally, it is worth noting that for JTs, since the underlying graph is a tree, message passing is exact. We follow a specific message-passing ordering of the standard Belief Propagation algorithm, which is guaranteed to converge to the exact marginals.
+
+\subsubsection{Forward–Backward Algorithm}
+At this point, it is natural to highlight the connection between the JT approach described above and the more classical algorithms for HMMs along with their variants. Readers familiar with the literature will recognise that the message passing operations we performed are precisely the equivalent to the well-known \emph{forward–backward equations}~\cite{binder1997space,wiki:forward_backward,aviles}. \\
+The forward and backward recursions applied to the proposed model are shown below:
+
+\paragraph{Forward:}
+\begin{flalign}
+    &\qquad \text{Define:} \qquad \alpha_t^k = p(A_{1:t}, S_t = i)& \nonumber \\
+    &\qquad \text{Init:} \qquad \alpha_1^k = p(S_1 = k)p(\vec{A}_1 \mid S_1 = k)& \nonumber \\
+    &\qquad \text{Iteration:} \qquad \alpha_t^k = p(\vec{A}_t \mid S_t = k)\sum\limits_{i=1}^m \alpha_{t-1}^i \cdot p(S_t = k \mid S_{t-1} = i)& \label{eqn:forward_eqn}
+\end{flalign}
+
+\paragraph{Backward:}
+\begin{flalign}
+    &\qquad \text{Define:} \qquad \beta^k_t = p(A_{1:t}, S_t = i)& \nonumber \\
+    &\qquad \text{Init:} \qquad \beta^k_T = 1 \quad \forall \, k& \nonumber \\
+    &\qquad \text{Iteration:} \qquad \beta^k_t = \sum\limits_{i=1}^m p(S_{t+1} = i \mid S_t = k) \cdot p(\vec{A}_{t+1} \mid S_{t+1} = i) \cdot \beta_{t+1}^i& \label{eqn:backward_eqn}
+\end{flalign}
+
+\subsubsection*{Remarks on Forward–Backward and Baum–Welch}
+The messages passed in the JT (Equations~\ref{eqn:rightward_message_init} - \ref{eqn:leftward_message_final}) coincide with the $\alpha$ and $\beta$ recursions in Equations~\ref{eqn:forward_eqn}–\ref{eqn:backward_eqn}. The distinction is thus in presentation alone. The JT framework is a generalisation for arbitrary graphical models, whereas the forward–backward is the special case formulation for the structure of HMMs\cite{hmm_slides}.
+
+It is worth emphasising the parallel between the JT messages and the forward–backward quantities. The forward recursion $\alpha_t^k=p(A_{1:t},S_t=k)$ and the backward recursion $\mathit{\beta_t^k=p(A_{t+1:T}\mid S_t=k)}$ are algebraically equivalent to the inward and outward sum–product messages in the JT~\ref{fig:jt_diagram}. When inward and outward messages are combined at a cluster or sepset, the resulting posterior marginals $p(S_t \mid A_{1:T})$ and pairwise marginals $p(S_t,S_{t+1}\mid A_{1:T})$ coincide with the responsibilities computed from Baum-Welch. Thus, the JT message-passing procedure and the forward–backward algorithm produce identical posterior marginals. These results will be of interest in the following sub section for parameter estimation~\cite{aviles,dnbc_drought_first,hmm_slides,wiki:baum_welch}.
+
+In summary, the JT formulation highlights the structural perspective, while forward–backward and Baum–Welch remain the traditional algorithms in the literature. Both views are mathematically equivalent and lead to the same computations.
+
+\subsection{Parameter Estimation}
+Parameter estimation for the DNBC is carried out using the Expectation–Maximization (EM) algorithm~\cite{moon_tk}.  
+We distinguish between the hidden variables, observed data, and model parameters as follows:
+
+\begin{align*}
+    \mathcal{H} &= (S_t)_{t=1}^T  \\
+    \mathcal{D} &= (\vec{A}_t)_{t=1}^T  \\
+    \Theta &= (\vec{\theta}_1, \vec{\theta}_2, \vec{\theta}_3)  \\
+    \text{Whe}& \text{re,} \\
+     & \quad \vec{\theta}_1 = \{\pi_1, \pi_2, \dots, \pi_m\} \equiv \text{Priors Probabilities}  \\
+     & \quad \vec{\theta}_2 = \{a_{i,j} \mid i,j = 1, \dots, m\} \equiv \text{Transition Probabilities}  \\
+     & \quad \vec{\theta}_3 = \left\{ b_i^{(n)}(j) \,\middle|\, i = 1,\dots,m; \, n = 1,\dots,N; \, j = 1,\dots,C_n \right\} \equiv \text{Emission Probabilities} 
+\end{align*}
+
+The EM algorithm iteratively alternates between two steps:
+
+\subsubsection{1. E-Step}
+
+In this step, we hold $\Theta$ fixed and compute the posterior distribution over the hidden states:
+
+\begin{align}
+    q(\mathcal{H}) &= p(\mathcal{H} \mid \mathcal{D}, \Theta) \nonumber \\
+    &= p(\vec{S}_{1:T} \mid A_{1:T}, \Theta) \numberthis \label{eqn:e_step}
+\end{align}
+
+This corresponds directly to the inference problem, as previously discussed in Section~\ref{sec:inference}.
+
+\subsubsection{2. M-Step}
+
+Next, with $q$ fixed, we maximise the variational lower bound
+\[
+    \mathscr{L}(q, \Theta) = \sum\limits_{\mathcal{H}}q(\mathcal{H}) \cdot \log \left( \frac{p(\mathcal{D}, \; \mathcal{H} \mid \Theta)}{q(\mathcal{H})} \right)
+\]
+with respect to $\Theta$.
+
+Equivalently, this requires solving
+\begin{align}
+    \Theta &= \underset{\Theta}{\operatorname{argmax}} \; \mathcal{Q}(\Theta) \nonumber \\
+    &= \underset{\Theta}{\operatorname{argmax}} \sum\limits_{\mathcal{H}} q(\mathcal{H}) \cdot \log \, p(\mathcal{D}, \mathcal{H} \mid \Theta) \numberthis \label{eqn:m_step}
+\end{align}
+
+The inner term, $\log \, p(\mathcal{D}, \mathcal{H} \mid \Theta)$, is simply the log of the joint distribution introduced in Equation~\ref{eqn:joint_distr}. Expanding this expression yields:
+\begin{align*}
+    p(A_{1:T} \, \vec{S}_{1:T} \mid \Theta) &= \log \, p(S_1 \mid \vec{\theta}_1) \\ 
+    &\qquad + \sum\limits_{t=1}^{T-1} \log \, p(S_{t+1} \mid S_t, \, \vec{\theta}_2) \\ 
+    &\qquad + \sum\limits_{n=1}^N \sum\limits_{t=1}^T \log \, p(A_t^{(n)} \mid S_t, \, \vec{\theta}_3) 
+\end{align*}
+
+Substituting this into $\mathcal{Q}(\Theta)$ and carefully reorganising terms allows us to isolate contributions from priors, transitions, and emissions. Since all RVs are discrete, probabilities translate directly into parameterised forms, and the optimisation decouples naturally across $\vec{\theta}_1, \vec{\theta}_2$, and $\vec{\theta}_3$.
+
+\begin{align*}
+    \mathcal{Q} &= \sum\limits_{\mathcal{H}} q(\mathcal{H}) \cdot \log \, p(\mathcal{D}, \mathcal{H} \mid \Theta) \\
+    &= \sum\limits_{\mathcal{H}} q(\mathcal{H}) \cdot \bigr[ \log \, p(S_1 \mid \vec{\theta}_1) \\ 
+    &\qquad \qquad \qquad + \sum\limits_{t=1}^{T-1} \log \, p(S_{t+1} \mid S_t, \, \vec{\theta}_2) \\ 
+    &\qquad \qquad \qquad + \sum\limits_{n=1}^N \sum\limits_{t=1}^T \log \, p(A_t^{(n)} \mid S_t, \, \vec{\theta}_3) \bigr]
+\end{align*}
+
+We then multiply $\sum\limits_{\mathcal{H}} q(\mathcal{H})$ through, understanding that $\mathcal{H} = (S_1, \dots, S_T)$
+\begin{align*}
+    &= \sum\limits_{S_1, \dots, S_T} \log \, p(S_1 \mid \vec{\theta}_1) \, q(S_1, \dots, S_T) \\ 
+    & \qquad + \sum\limits_{S_1, \dots, S_T} \sum\limits_{t=1}^{T-1} \log \, p(S_{t+1} \mid S_t, \, \vec{\theta}_2) \, q(S_1, \dots, S_T) \\ 
+    &\qquad + \sum\limits_{S_1, \dots, S_T} \sum\limits_{n=1}^N \sum\limits_{t=1}^T \log \, p(A_t^{(n)} \mid S_t, \, \vec{\theta}_3) \, q(S_1, \dots, S_T) \\
+    \\
+    &= \sum\limits_{S_1} \log \, p(S_1 \mid \vec{\theta}_1) \, q(S_1) + \sum\limits_{S_2, \dots, S_T} q(S_2, \dots, S_T) \\ 
+    & \qquad + \sum\limits_{t=1}^{T-1} \sum\limits_{S_t, S_{t+1}} \log \, p(S_{t+1} \mid S_t, \, \vec{\theta}_2) \, q(S_t, S_{t+1}) + \sum_{\substack{S_1,\dots, S_T \\ \setminus S_t, \, S_{t+1}}} q(S_1, \dots, S_T) \\ 
+    &\qquad + \sum\limits_{n=1}^N \sum\limits_{t=1}^T \sum\limits_{S_t} \log \, p(A_t^{(n)} \mid S_t, \, \vec{\theta}_3) \, q(S_t) + \sum_{\substack{S_1,\dots, S_T \\ \setminus S_t}} q(S_1, \dots, S_T) \\
+\end{align*}
+
+Since the goal is to optimise w.r.t $\Theta = (\vec{\theta}_1,\vec{\theta}_2,\vec{\theta}_3)$, all the terms not involving $\Theta$ can be dropped, whilst also using the result $\sum\limits_{S_t} p(S_t) = \sum\limits_{i=1}^m p(S_t = i)$
+\begin{align*}
+    &= \sum\limits_{i=1}^m \log \, p(S_1 = i \mid \vec{\theta}_1) \, q(S_1 = i) \\
+    & \qquad + \sum\limits_{t=1}^{T-1} \sum\limits_{i=1}^m \sum\limits_{j=1}^m \log \, p(S_{t+1} = j \mid S_t = i, \, \vec{\theta}_2) \, q(S_t = i, S_{t+1} = j) \\
+    &\qquad + \sum\limits_{n=1}^N \sum\limits_{t=1}^T \sum\limits_{i=1}^m \log \, p(A_t^{(n)} \mid S_t = i, \, \vec{\theta}_3) \, q(S_t = i) \\
+\end{align*}
+
+This representation can be expressed in terms of the model parameters. Because all random variables are discrete, the probabilities naturally reduce to combinations of these parameters.
+\begin{align*}
+    &= \sum_{i=1}^m q(S_1 = i) \log \pi_i \\
+    &\qquad + \sum_{t=1}^{T-1}\sum_{i=1}^m\sum_{j=1}^m q(S_t=i,S_{t+1}=j)\log a_{i,j}\\ 
+    &\qquad +  \sum\limits_{t=1}^T \sum\limits_{i=1}^m  q(S_t = i)  \sum\limits_{n=1}^N \log b_i^{(n)}(A_t^{(n)}) \\
+\end{align*}
+
+Each of the target parameters are now separated into their own terms and thus can be easily optimised in isolation. This yields the standard re-estimation updates~\cite{jm3,xing_slides}:
+\begin{equation}
+    \boxed{\;\pi_i^{\text{new}} = q(S_1=i)\;}
+    \label{eqn:prior_update_rule}
+\end{equation}
+\begin{equation}
+    \boxed{\;a_{i,j}^{\text{new}}=\frac{\sum\limits_{t=1}^{T-1} q(S_t=i,S_{t+1}=j)}{\sum\limits_{t=1}^{T-1} q(S_t=i)}\;}
+    \label{eqn:transition_update_rule}
+\end{equation}
+\begin{equation}
+    \boxed{\; b_i^{(n)}(j)^{\text{new}} = \frac{\sum\limits_{t=1}^T q(S_t = i) \cdot \mathbf{1}(A_t^{(n)} = j)}{\sum\limits_{t=1}^T q(S_t = i)} \;}
+    \label{eqn:emission_update_rule}
+\end{equation}
+
+\subsection{Model Selection}
+Model selection will involve determining the appropriate cardinality of each latent drought states $S_t$, that is, determining the value of $m$. When selecting $m$, a balance must be struck between model complexity and goodness of fit, as a larger value of $m$ gives the model a greater ability to capture subtle drought dynamics but risks overfitting. On the other hand, a smaller number may be too restrictive to reflect the underlying processes.
+
+To guide this choice, three complementary criteria are applied: the Akaike Information Criterion (AIC), the Bayesian Information Criterion (BIC), and the maximised log-likelihood of the fitted model. These are given by
+\begin{align}
+    AIC &= -2 \cdot \log L(\Theta) + 2p, \label{eqn:aic}\\
+    BIC &= -2 \cdot \log L(\Theta) + p \cdot \log k, \label{eqn:bic}
+\end{align}
+where $L(\Theta)$ is the maximised value of the likelihood function, $p$ is the number of free parameters in the model, and $k$ is the number of data points.  
+
+The philosophy underlying these criteria is rooted in Occam’s razor, which is often phrased as ”the simplest
+explanation is usually the best one”. AIC and BIC both balance model fit against complexity, but with differing severity. BIC applies a stronger penalty on complexity and is thus generally considered more consistent with Occam’s razor~\cite{Barber_2012}. Thus, the framework for selecting $m$ as follows:
+\begin{enumerate}
+    \item \textbf{Primary:} select the model with the lowest BIC, penalising unnecessary complexity.
+    \item \textbf{Secondary:} use AIC to cross-check results.
+    \item \textbf{Tertiary:} inspect the log-likelihood curve. If $\log L(\Theta)$ improves only marginally as $m$ increases, the simpler model is preferred (the so-called “elbow rule”).
+\end{enumerate}
+
+In practice, model selection is performed by sweeping across candidate values of $m$, fitting a model for each case, and comparing their AIC, BIC, and log-likelihood values. The final choice of $m$ seeks to minimise both AIC and BIC while ensuring that the likelihood $L(\Theta)$ does not deteriorate substantially.
+
+\subsubsection{Choice of $k$}
+
+The term $k$ in~\eqref{eqn:bic} represents the number of data points. Following common practice in the literature and implementation libraries such as the \texttt{seqHMM} package in R~\cite{cran_hmmSeq}, $k$ is calculated as: 
+\[
+    k = T \times N,
+\]
+
+\subsubsection{Number of Free Parameters $p$}
+
+The number of free parameters $p$ corresponds to the model’s degrees of freedom. This includes contributions from the prior probabilities~\ref{tbl:priors_factor_table}, the transition probabilities~\ref{tbl:transition_factor_table}, and the emission probabilities~\ref{tbl:emission_factor_table}. It is widely accepted in the literature and implementations regarding HMMs and its variants~\cite{cran_hmmSeq,free_params_slides} that
+\begin{align*}
+    p &= (m-1) + m(m-1) + \sum_{n=1}^N m(C_n - 1) \\
+      &= m^2 - 1 + m \sum_{n=1}^N (C_n - 1),
+\end{align*}
+
+\subsubsection{Log-Likelihood Estimation}
+
+The third component of model selection is the log-likelihood, $\ell(\Theta)$, which measures the probability of the observed data under the model parameters:
+\[
+    \ell(\Theta) = p(A_{1:T}^\text{obs} \mid \Theta).
+\]
+
+This likelihood can be evaluated efficiently using the forward algorithm. Recall that the forward variable is defined as
+\[
+    \alpha_t^k = p(S_t = k, A_{1:t} \mid \Theta),
+\]
+The overall likelihood is then simply obtained by marginalising over the latent state at the final time step:
+\begin{align*}
+    \sum_{i=1}^m \alpha_T^i &= \sum_{S_T} p(A_{1:T}, S_T \mid \Theta) \\
+                             &= p(A_{1:T} \mid \Theta) \;=\; \ell(\Theta).
+\end{align*}
+
+Although the derivation via the forward algorithm is given for clarity, it has been established that it is equivalent to the rightward message-passing procedure in the JT approach (Section~\ref{sec:inference}). For this approach, an additional downward message $\delta_{\downarrow T}(S_T)$ must be computed at the final cluster to obtain the posterior $\psi_T(S_T, \vec{A}_T)$. Marginalising out $S_T$ from this posterior yields the desired likelihood. It is useful to see Figure~\ref{fig:jt_diagram}.
+
+Create a final draft for this:
+
+\section{Model Implementation}
+
+\subsection{Programming Environment \& Tools}
+All aspects of the DNBC model were implemented in \texttt{C++}, primarily chosen for its computational efficiency and the availability of the \texttt{emdw} library. This library provides robust functionality for probabilistic graphical models. The \texttt{C++} implementation handled the construction of factors, junction tree message passing, parameter estimation, model selection, and extraction of posterior outputs.  
+
+Python was used to complement this workflow, particularly for data-related tasks such as raw data extraction, preprocessing into model inputs, postprocessing of model outputs, and visualisation of results. This division allowed \texttt{C++} to focus on core model computation while Python streamlined data management and analysis.
+
+\subsection{Data Pipeline Implementation}
+The data pipeline was designed to translate raw climate data into discretised indices that serve as inputs to the model. The visualisation of this pipeline and its flow is shown in Figure~\ref{fig:pipeline-diagram}
+At a high level, the process consisted of:
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=\linewidth]{pipeline-diagram.png}
+    \caption[Data pipeline for DNBC inputs]{Data pipeline from raw climate and vegetation data to discretised indices used as DNBC inputs. The pipeline consists of five stages: data collection, preprocessing, index calculation, discretisation, and input formatting.}
+    \label{fig:pipeline-diagram}
+\end{figure}
+
+
+\begin{enumerate}
+    \item \textbf{Data Collection:} Acquiring raw climate and vegetation data.
+    \item \textbf{Preprocessing:} Handle missing values, time and space alignment, ensuring data consistency, etc.
+    \item \textbf{Index Calculation:} Input indices (SPI, SDI, and NDVI) were calculated following formulas given in Section~\ref{sec:index-calc}.
+    \item \textbf{Discretisation:} Convert continuous indices into categorical for DNBC input.
+    \item \textbf{Input Formatting:} Finally, these discretised indices are formatted and saved as a CSV file, ready for model ingestion with \texttt{C++}.
+\end{enumerate}
+This pipeline was implemented using Python.
+
+\subsection{Model Implementation}
+Implementation of the DNBC was achieved through two main functions: \texttt{runEM} and \texttt{modelSelection}.
+
+\subsubsection*{runEM}
+The \texttt{runEM} function performed parameter estimation using the EM algorithm, paired with exact inference offered by the JT methodology:
+\begin{enumerate}
+    \item Random initialisation of parameters (sampled from a Gaussian distribution, typically standard normal).
+    \item Construction of discrete factors using the \texttt{emdw} library.
+    \item Initialisation of cluster potentials and message passing as seen in Figure~\ref{fig:jt_diagram} to perform exact inference.
+          \begin{itemize}
+              \item To avoid underflow, all factors were normalised after each update. This sacrificed some efficiency but significantly improved numerical stability.
+          \end{itemize}
+    \item Parameter update step (M-step).
+    \item Likelihood calculation and convergence check using the relative tolerance criterion:
+    \[
+        \frac{|\ell(\Theta)^{\text{new}} - \ell(\Theta)^{\text{old}}|}{\ell(\Theta)^{\text{old}}} < \epsilon
+    \]
+        where the maximum number of iterations was capped at 100, whilst the threshold value was chosen to be $\epsilon = 10^{-4}$.
+\end{enumerate}
+
+\subsubsection*{modelSelection}
+The \texttt{modelSelection} function evaluated different values of the hyperparameter $m$:
+\begin{enumerate}
+    \item For each candidate $m$, the model was run with 10 random restarts.
+    \item The best run (highest log-likelihood) was retained.
+    \item Model fit metrics (AIC, BIC, and maximum log-likelihood) were recorded for each $m$.
+    \item Results were exported to CSV files for analysis with Python.
+\end{enumerate}
+
+\subsection{Model Selection \& Output}
+
+The final model outputs were exported in two forms:
+\begin{itemize}
+    \item Posterior decoding using the Maximum Posterior Marginal (MPM) rule.
+    \item State sequence decoding using the Viterbi algorithm.
+\end{itemize}
+Both outputs were written to CSV files by the \texttt{C++}, then processed and visualised in Python.  

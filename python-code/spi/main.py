@@ -1,23 +1,37 @@
 import pandas as pd
 import numpy as np
 from scipy.stats import gamma, norm
+import os
+
 
 def save_dataframe(df: pd.DataFrame, csv_path: str, debug=False):
     """
-    Save DataFrame to a CSV file.
-    
+    Save DataFrame to a CSV file, creating directories if needed.
+
     Args:
         df: DataFrame to save
         csv_path: Path where CSV file will be saved
-    
+        debug: Whether to print debug information
+
     Returns:
         None
     """
 
+    # Extract directory path from the full file path
+    directory = os.path.dirname(csv_path)
+
+    # Create directories if they don't exist
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+        if debug:
+            print(f"Created directory: `{directory}`")
+
+    # Save the DataFrame
     df.to_csv(csv_path, index=False)
 
     if debug:
         print(f"Saved CSV to: `{csv_path}`")
+
 
 def get_nan_rain_values(data: pd.DataFrame, station):
     station_data = data[data["station"] == station]
@@ -111,7 +125,7 @@ def calculate_spi_station(df, scale=3):
         spi_values[np.where(month_mask)[0][-len(spi_month) :]] = spi_month
 
     # Store SPI
-    df[f"SPI_{scale}"] = spi_values
+    df["SPI"] = spi_values
 
     # Clean up helper column
     df.drop(columns=["precip_roll"], inplace=True)
@@ -124,9 +138,8 @@ def calculate_spi_station(df, scale=3):
 
 def add_month_name(df: pd.DataFrame):
     # Add month abbreviation column
-    df['month_abbr'] = df['date'].dt.strftime('%b').str.upper()
+    df["month_abbr"] = df["date"].dt.strftime("%b").str.upper()
     return df
-
 
 
 def main():
@@ -147,9 +160,9 @@ def main():
     # ==================== Calculate 3-month SPI ====================
     buffeljags_spi = calculate_spi_station(buffeljags_df, scale=3)
 
-    save_dataframe(buffeljags_spi, "./../combine_indices/data/buffeljags_spi.csv", debug=True)
-
+    save_dataframe(buffeljags_spi, "./data/processed/spi.csv", debug=True)
     return
+
 
 if __name__ == "__main__":
     main()

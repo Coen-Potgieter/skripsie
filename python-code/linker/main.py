@@ -1,38 +1,114 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+
+
+# SPI/SDI categories (standardised)
+SPI_SDI_BINS = {
+    "Extreme drought": (-np.inf, -2.0),
+    "Severe drought": (-2.0, -1.5),
+    "Moderate drought": (-1.5, -1.0),
+    "Mild drought": (-1.0, -0.5),
+    "Near normal": (-0.5, 0.5),
+    "Mild wet": (0.5, 1.0),
+    "Moderate wet": (1.0, 1.5),
+    "Severe wet": (1.5, 2.0),
+    "Extreme wet": (2.0, np.inf),
+}
+
+# NDVI categories (general vegetation health)
+NDVI_BINS = {
+    "Bare soil / water": (-1.0, 0.1),
+    "Sparse vegetation": (0.1, 0.2),
+    "Moderate vegetation": (0.2, 0.4),
+    "Dense vegetation": (0.4, 0.6),
+    "Very dense vegetation": (0.6, 1.0),
+}
 
 
 def save_csv(df: pd.DataFrame, file_path):
+
+    # Extract directory path from the full file path
+    directory = os.path.dirname(file_path)
+    os.makedirs(directory, exist_ok=True)
+
     df.to_csv(file_path, index=False)
     print(f"Data Frame Saved To:`{file_path}`...")
 
 
-def combine_dataframes(sdi_df: pd.DataFrame, spi_df: pd.DataFrame) -> pd.DataFrame:
+def bucketize_value(val, bins: dict) -> int:
+    """Return integer code for a value given bins dict {label: (low, high)}"""
+    for i, (label, (low, high)) in enumerate(bins.items()):
+        if low <= val < high:
+            return i + 1
+    return np.nan  # fallback
+
+
+def discretise_drought_indices(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Combine two DataFrames on year and month, keeping only SDI_3 and SPI_3 columns.
-    Removes null values from the beginning and end of both SDI_3 and SPI_3 columns.
+    Convert continuous SPI, SDI, NDVI into discretised integer categories.
+    """
+    # Apply to SPI
+    df["SPI"] = df["SPI"].apply(lambda x: bucketize_value(x, SPI_SDI_BINS))
+
+    # Apply to SDI
+    df["SDI"] = df["SDI"].apply(lambda x: bucketize_value(x, SPI_SDI_BINS))
+
+    # Apply to NDVI
+    df["NDVI"] = df["NDVI"].apply(lambda x: bucketize_value(x, NDVI_BINS))
+
+    return df[["year", "month", "SPI", "SDI", "NDVI"]]
+
+
+def combine_dataframes(
+    sdi_df: pd.DataFrame, spi_df: pd.DataFrame, ndvi_df: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Combine three DataFrames on year and month, keeping only SDI, SPI and NDVI columns.
+    Removes null values from the beginning and end of both SDI, SPI and NDVI columns.
 
     Args:
-        sdi_df: First DataFrame with YEAR, MONTH, and SDI_3 columns
-        spi_df: Second DataFrame with year, month, and SPI_3 columns
+        sdi_df: First DataFrame with year, month, and SDI columns
+        spi_df: Second DataFrame with year, month, and SPI columns
+        ndvi_df: Third DataFrame with year, month, and NDVI columns
 
     Returns:
-        Merged DataFrame with year, month, SDI_3, and SPI_3 columns
+        Merged DataFrame with year, month, SDI, SPI & NDVI columns
     """
+
+    print("Combining Data Frames...")
     # Standardize column names and select relevant columns
-    sdi_df_clean = sdi_df[["YEAR", "MONTH", "SDI_3"]].rename(
-        columns={"YEAR": "year", "MONTH": "month"}
-    )
-    spi_df_clean = spi_df[["year", "month", "SPI_3"]]
+    spi_df_clean = spi_df[["year", "month", "SPI"]]
+    sdi_df_clean = sdi_df[["year", "month", "SDI"]]
+    ndvi_df_clean = ndvi_df[["year", "month", "NDVI"]]
 
     # Merge on year and month, keeping only overlapping dates
     merged_df = pd.merge(sdi_df_clean, spi_df_clean, on=["year", "month"], how="inner")
+    merged_df = pd.merge(merged_df, ndvi_df_clean, on=["year", "month"], how="inner")
 
     # Remove All NaNs
-    merged_df = merged_df.dropna(subset=["SDI_3", "SPI_3"])
+    merged_df = merged_df.dropna(subset=["SDI", "SPI", "NDVI"])
+    print("✓ Success\n")
 
-    return merged_df
+    print("Checking Data...")
+    check_data(merged_df)
+    print("✓ Success\n")
+
+    print("Preparing Data...")
+    # Discretise first
+    discretised_data = discretise_drought_indices(merged_df)
+
+    # Ensure data is sorted by year/month
+    sorted_data = discretised_data.sort_values(["year", "month"]).reset_index(drop=True)
+
+    # Select final Attributes
+    final_df = sorted_data[["SPI", "SDI", "NDVI"]].rename(
+        columns={"SPI": "A1", "SDI": "A2", "NDVI": "A3"}
+    )
+    print("✓ Success")
+
+    return final_df
 
 
 def find_missing_months(df: pd.DataFrame) -> list:
@@ -111,7 +187,7 @@ def check_data(df: pd.DataFrame):
         print("✓ No Missing Dates")
 
     # Print Range of specified columns
-    target_columns = ["SPI_3", "SDI_3"]
+    target_columns = ["SPI", "SDI", "NDVI"]
 
     for col_name in target_columns:
         vals = df.loc[:, col_name]
@@ -208,32 +284,52 @@ def plot_model_selection(csv_file: str):
     plt.show()
 
 
-def main():
-    # plot_model_selection("../../data/synthetic/modelSelection.csv")
-    # return
-    # extract_output()
-    # return
-    attrs = {
-        "A1": {"type": "discrete", "cardinality": 8},
-        "A2": {"type": "discrete", "cardinality": 7},
-        # "A3": {"type": "discrete", "cardinality": 7},
-    }
+def playing():
+    data = pd.read_csv("../../data/real/veterbi_output.csv", index_col=None)
+    print(data)
 
-    synthetic_data = generate_data(T=20, attribute_types=attrs)
-    print(synthetic_data)
-    save_csv(synthetic_data, file_path="../../data/synthetic/test.csv")
+
+def main():
+
+    # playing()
+    # return
+
+    # ==================== Plot BIC, AIC, Log-Likelihood ====================
+    # plot_model_selection("../../data/synthetic/modelSelection.csv")
+    plot_model_selection("../../data/real/modelSelection.csv")
     return
 
-    spi_path = "./data/buffeljags_spi.csv"
-    sdi_path = "./data/sdi.csv"
+    # ==================== Extract Output ====================
+    # extract_output()
+    # return
+
+    # ==================== Generate Synthetic Data ====================
+    # time_steps = 500
+    # attrs = {
+    #     "A1": {"type": "discrete", "cardinality": 8},
+    #     "A2": {"type": "discrete", "cardinality": 7},
+    #     "A3": {"type": "discrete", "cardinality": 3},
+    # }
+
+    # synthetic_data = generate_data(time_steps, attribute_types=attrs)
+    # print(synthetic_data)
+    # save_csv(synthetic_data, file_path="../../data/synthetic/test.csv")
+    # return
+
+    # ==================== Combine Data ====================
+
+    spi_path = "../spi/data/processed/spi.csv"
+    sdi_path = "../sdi/data/sdi_data/sdi.csv"
+    ndvi_path = "../ndvi/data/processed_data/ndvi.csv"
 
     sdi_data = pd.read_csv(sdi_path)
     spi_data = pd.read_csv(spi_path)
+    ndvi_data = pd.read_csv(ndvi_path)
 
-    combined_df = combine_dataframes(spi_df=spi_data, sdi_df=sdi_data)
+    final_df = combine_dataframes(spi_df=spi_data, sdi_df=sdi_data, ndvi_df=ndvi_data)
 
-    check_data(combined_df)
-    # print(combined_df)
+    # Save to CSV (no index)
+    final_df.to_csv("../../data/real/inp.csv", index=False)
 
 
 if __name__ == "__main__":

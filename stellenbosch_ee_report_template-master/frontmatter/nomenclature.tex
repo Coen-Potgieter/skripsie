@@ -8,6 +8,11 @@
 \renewcommand{\arraystretch}{1.2}
 \renewcommand{\tabularxcolumn}[1]{p{#1}}
 \begin{tabularx}{\textwidth}{@{}p{2.5cm}L}
+    $S_t$ & TODO \\
+    $A_t^{(n)}$ & TODO \\
+    $a_t^{(n)}$ & TODO \\
+    $a_{i,j}$ & The probability of a transition from HMM state $s_i$ to state $s_j$. \\
+    $b_i^{(n)}(j)$ & TODO. \\
     $p(x)$ & Probability density function with respect to variable $x$.\\
     $P(A)$ & Probability of event $A$ occurring.\\
     $\varepsilon$ & The Bayes error. \\
@@ -22,7 +27,6 @@
     $\Sigma$ & Statistical covariance matrix. \\
     $L(\mathbf{S})$ & Log likelihood of the set of HMM states $\mathbf{S}$ generating the training set observation vectors assigned to the states in that set. \\
     $\mathcal{N}(\mathbf{x} | \mu, \Sigma)$ & Multivariate Gaussian PDF with mean $\mu$ and covariance matrix $\Sigma$.\\
-    $a_{ij}$ & The probability of a transition from HMM state $s_i$ to state $s_j$. \\
     $N$ & Total number of frames or number of tokens, depending on the context. \\
     $D$ & Number of deletion errors. \\
     $I$ & Number of insertion errors. \\
@@ -37,6 +41,7 @@
 \begingroup
 \renewcommand{\arraystretch}{1.2}
 \begin{tabular}{@{}p{2.5cm} l}
+    DNBC    & Dynamic Naive Bayes Classifier \\
     AE      & Afrikaans English \\
     AID     & accent identification \\
     ASR     & automatic speech recognition \\
