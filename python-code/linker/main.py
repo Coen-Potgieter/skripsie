@@ -5,7 +5,7 @@ import os
 
 
 # SPI/SDI categories (standardised)
-SPI_SDI_BINS = {
+SPI_SDI_BINS1 = {
     "Extreme drought": (-np.inf, -2.0),
     "Severe drought": (-2.0, -1.5),
     "Moderate drought": (-1.5, -1.0),
@@ -16,15 +16,31 @@ SPI_SDI_BINS = {
     "Severe wet": (1.5, 2.0),
     "Extreme wet": (2.0, np.inf),
 }
+SPI_SDI_BINS2 = {
+    "Severe drought": (-np.inf, -1.5),
+    "Moderate drought": (-1.5, -0.0),
+    "Normal": (-0.5, 0.5),
+    "Moderate wet": (0.5, 1.5),
+    "Extreme wet": (1.5, np.inf),
+}
+
 
 # NDVI categories (general vegetation health)
-NDVI_BINS = {
+NDVI_BINS1 = {
     "Bare soil / water": (-1.0, 0.1),
     "Sparse vegetation": (0.1, 0.2),
     "Moderate vegetation": (0.2, 0.4),
     "Dense vegetation": (0.4, 0.6),
     "Very dense vegetation": (0.6, 1.0),
 }
+
+SPI_SDI_BINS = SPI_SDI_BINS2
+NDVI_BINS = NDVI_BINS1
+USE_PREDEFINED = False
+NUM_BINS = 5
+METHOD = "quantile"  # Equal-frequency bins - each bin has roughly the same number of observations. Good for balanced datasets.
+# METHOD = "equal" # Equal-width bins based on min-max range. Simple and interpretable.
+# METHOD = "std" # Standard deviation-based bins - specifically designed for standardized indices like SPI/SDI where values center around 0 with std ≈ 1.
 
 
 def save_csv(df: pd.DataFrame, file_path):
@@ -45,20 +61,80 @@ def bucketize_value(val, bins: dict) -> int:
     return np.nan  # fallback
 
 
-def discretise_drought_indices(df: pd.DataFrame) -> pd.DataFrame:
+def discretise_drought_indices(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
     """
     Convert continuous SPI, SDI, NDVI into discretised integer categories.
+
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame with columns: year, month, SPI, SDI, NDVI
+
+    Returns:
+    --------
+    pd.DataFrame with discretised values
     """
-    # Apply to SPI
-    df["SPI"] = df["SPI"].apply(lambda x: bucketize_value(x, SPI_SDI_BINS))
+    result_df = df[["year", "month"]].copy()
 
-    # Apply to SDI
-    df["SDI"] = df["SDI"].apply(lambda x: bucketize_value(x, SPI_SDI_BINS))
+    if USE_PREDEFINED:
+        # Original functionality with predefined bins
+        if "SPI" in df.columns and SPI_SDI_BINS is not None:
+            result_df["SPI"] = df["SPI"].apply(
+                lambda x: bucketize_value(x, SPI_SDI_BINS)
+            )
 
-    # Apply to NDVI
-    df["NDVI"] = df["NDVI"].apply(lambda x: bucketize_value(x, NDVI_BINS))
+        if "SDI" in df.columns and SPI_SDI_BINS is not None:
+            result_df["SDI"] = df["SDI"].apply(
+                lambda x: bucketize_value(x, SPI_SDI_BINS)
+            )
 
-    return df[["year", "month", "SPI", "SDI", "NDVI"]]
+        if "NDVI" in df.columns and NDVI_BINS is not None:
+            result_df["NDVI"] = df["NDVI"].apply(
+                lambda x: bucketize_value(x, NDVI_BINS)
+            )
+
+    else:
+        # Even binning based on data range
+        if "SPI" in df.columns:
+            if METHOD == "quantile":
+                result_df["SPI"] = (
+                    pd.qcut(df["SPI"], q=NUM_BINS, labels=False, duplicates="drop") + 1
+                )
+            elif METHOD == "equal":
+                result_df["SPI"] = pd.cut(df["SPI"], bins=NUM_BINS, labels=False) + 1
+            elif METHOD == "std":
+                result_df["SPI"] = bin_by_std(df["SPI"], NUM_BINS) + 1
+
+        if "SDI" in df.columns:
+            if METHOD == "quantile":
+                result_df["SDI"] = (
+                    pd.qcut(df["SDI"], q=NUM_BINS, labels=False, duplicates="drop") + 1
+                )
+            elif METHOD == "equal":
+                result_df["SDI"] = pd.cut(df["SDI"], bins=NUM_BINS, labels=False) + 1
+            elif METHOD == "std":
+                result_df["SDI"] = bin_by_std(df["SDI"], NUM_BINS) + 1
+
+        if "NDVI" in df.columns:
+            if METHOD == "quantile":
+                result_df["NDVI"] = (
+                    pd.qcut(df["NDVI"], q=NUM_BINS, labels=False, duplicates="drop") + 1
+                )
+            elif METHOD == "equal":
+                result_df["NDVI"] = pd.cut(df["NDVI"], bins=NUM_BINS, labels=False) + 1
+            else:
+                # For NDVI with std METHOD, use equal-width as fallback
+                result_df["NDVI"] = pd.cut(df["NDVI"], bins=NUM_BINS, labels=False) + 1
+
+    # Return only columns that exist in result_df
+    cols_to_return = ["year", "month"]
+    for col in ["SPI", "SDI", "NDVI"]:
+        if col in result_df.columns:
+            cols_to_return.append(col)
+
+    return result_df[cols_to_return]
 
 
 def combine_dataframes(
@@ -97,6 +173,7 @@ def combine_dataframes(
 
     print("Preparing Data...")
     # Discretise first
+    method = METHOD
     discretised_data = discretise_drought_indices(merged_df)
 
     # Ensure data is sorted by year/month
@@ -330,6 +407,7 @@ def main():
 
     # Save to CSV (no index)
     final_df.to_csv("../../data/real/inp.csv", index=False)
+    print(final_df.min())
 
 
 if __name__ == "__main__":

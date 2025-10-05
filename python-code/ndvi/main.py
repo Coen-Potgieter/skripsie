@@ -437,17 +437,28 @@ def validate_ndvi(df: pd.DataFrame) -> None:
     max = df["NDVI"].max().round(4)
     print(f"NDVI values should be between -1 & 1. They are between: [{min}, {max}]")
 
-    # 3. Missing values
-    has_missing = df.isna().any().any()
-    print(f"No missing values: {not has_missing}")
-
-    # 4. Temporal order check
+    # 3. Temporal order check
     ordered = df.sort_values(["year", "month"]).equals(df)
     print(f"Data ordered by year/month: {ordered}")
 
-    # 5. Mean sanity
+    # 4. Mean sanity
     mean_val = df["NDVI"].mean()
     print(f"Mean NDVI: {mean_val:.3f} (reasonable: {-0.2 <= mean_val <= 0.9})")
+
+    # 5. Missing values
+    has_missing = df.isna().any().any()
+    if has_missing:
+        print("Data Frame Has Missing Values...")
+        nan_df = df[df.isnull().any(axis=1)]
+        for index, row in nan_df.iterrows():
+            print(
+                f"\tNaN Record: #{index}: (year, month) = ({int(row['year'])}, {int(row['month'])})"
+            )
+        print("\tImputing With Mean Value...")
+        df = df.fillna(df.mean())
+        print(f"\tNo missing values: {not df.isna().any().any()}")
+    else:
+        print(f"\tNo missing values: True")
 
     # 6. Seasonal pattern quick check
     if "month" in df.columns and not df.empty:
@@ -468,18 +479,22 @@ def main():
     data = pd.read_csv("./data/processed_data/ndvi.csv")
     validate_ndvi(data)
 
-    # print(data.head())
+    print(data.head())
     return
 
-    # ==================== Create Data Set For lat-long Area====================
-    coords = {"lat_min": -34.25, "lat_max": -33.75, "lon_min": 18.25, "lon_max": 19.0}
-    create_dataset_for_area(coords)
+    # ==================== Define Study Area Coords ====================
+    study_area_coords = {
+        "lat_max": -30.7,
+        "lat_min": -34.83,
+        "lon_min": 17.85,
+        "lon_max": 21.17,
+    }
+
+    # ==================== Create CSV Data Set For lat-long Area====================
+    create_dataset_for_area(study_area_coords)
     return
 
-    cape_town_data = extract_ndvi_by_region(
-        xrds, lat_min=-34.25, lat_max=-33.75, lon_min=18.25, lon_max=19.0
-    )
-    print(cape_town_data)
+    # ==================== Visulise Specific Region ====================
 
     dataset = "./data/raw_downloads/1981/AVHRR-Land_v005_AVH13C1_NOAA-07_19810624_c20170610041337.nc"
     # Load your dataset
@@ -489,9 +504,13 @@ def main():
     # wc_data = extract_western_cape_ndvi(xrds)
     # visualise_ndvi_region(wc_data, "NDVI - Western Cape")
 
-    cape_town_data = extract_ndvi_by_region(
-        xrds, lat_min=-34.25, lat_max=-33.75, lon_min=18.25, lon_max=19.0
-    )
+    study_area_coords = {
+        "lat_max": -30.7,
+        "lat_min": -34.83,
+        "lon_min": 17.85,
+        "lon_max": 21.17,
+    }
+    cape_town_data = extract_ndvi_by_region(xrds, **study_area_coords)
     print(cape_town_data)
 
     # return

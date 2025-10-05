@@ -159,9 +159,8 @@ int main(int, char *argv[]) {
         double epsilon = 1 * std::pow(10, -4);
         std::cout << epsilon << '\n';
 
-        // If `true` then runs the model with given `m`
-        // If `false` then sweeps `m` and saves model selection metrics
-        bool runModelSelection = false;
+        bool runModelSelection = true;
+        std::pair<int, int> modelSelectRange = std::make_pair(2, 8);
         size_t m = 5;
 
         //*********************************************************
@@ -194,7 +193,7 @@ int main(int, char *argv[]) {
         if (DEBUG) print2DArray(observedAttributes);
 
         if (runModelSelection)
-            modelSelection(observedAttributes, std::make_pair(1, 8), maxIters,
+            modelSelection(observedAttributes, modelSelectRange, maxIters,
                            epsilon, 10, outputDir + "modelSelection.csv",
                            DEBUG);
         else

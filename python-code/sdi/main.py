@@ -1,4 +1,5 @@
 import warnings
+import folium
 
 warnings.filterwarnings("ignore", module="urllib3")  # Ignores all warnings from urllib3
 
@@ -110,13 +111,99 @@ def check_valid_region(region_code: str):
     return region_code
 
 
-def scrape_river_stations(region_code: str):
+def scrape_all_breede_olifant_stations():
+    """
+    one of the endpoints broke, the study area is in Breede-Olifants.
+    I found this other end point: https://www.dws.gov.za/Hydrology/Unverified/, which lists the stations in that area
+    Unfortunately it is an interactive map, ie. Cannot get what I want using endpoints.
+    I could use selenium to navigate but Im just gonna copy the html since I only need this once...
+    """
+    with open("./data/stations_html.html", "r", encoding="utf-8") as file:
+        html_content = file.read()
+
+    # Create Beautiful Soup object
+    soup = BeautifulSoup(html_content, "html.parser")
+
+    table_rows = soup.find_all("tr")
+    # Remove header
+    table_rows.pop(0)
+
+    station_codes = []
+    for row in table_rows:
+        if row["bgcolor"] != "White":
+            continue
+        row_station_code = row.find("td").find("a").text
+
+        # We now filter out all non-River stations
+        #   - These are stations that don't have an `H` as the second letter
+
+        if row_station_code[2] != "H":
+            continue
+
+        station_codes.append(row_station_code)
+
+    # Now have all River type stations in Breede-Olifants
+    # We will now check if we have meta data on this station, if not then save it
+
+    for code in station_codes:
+        area_code = check_valid_region(code[0])
+
+        meta_dir = f"./data/station_data/river/region_{area_code}.json"
+        # Open particular meta_data_json
+        with open(meta_dir, "r") as tf:
+            meta_data = json.load(tf)
+
+        already_saved_codes = [elem["code"] for elem in meta_data]
+        if code in already_saved_codes:
+            print(code, "Already Saved")
+            continue
+        else:
+            print(code, "Not Saved, Saving Now...")
+
+        # Now we scrape the station and append the json
+        target_link = (
+            f"https://www.dws.gov.za/hydrology/Verified/HyDataSets.aspx?Station={code}"
+        )
+
+        r = re.get(target_link)
+        check_valid_response(r)
+
+        html_content = r.content
+        soup = BeautifulSoup(html_content, "html.parser")
+        lat = None
+        try:
+            lat = soup.find(id="tbLat")["value"]
+        except:
+            print(f"\t{code} Is Invalid")
+            continue
+
+        lon = soup.find(id="tbLong")["value"]
+
+        start_data = soup.find("input", {"name": "ctl06"})["value"]
+        end_data = soup.find(id="tbEnd_0")["value"]
+        station_name = soup.find(id="labPlace").text
+        new_entry = {
+            "code": code,
+            "name": station_name,
+            "catchment_area": "FuckYou",
+            "lat": lat,
+            "long": lon,
+            "data_avail": f"{start_data} to {end_data}",
+        }
+
+        meta_data.append(new_entry)
+
+        print("\t- Saving New Json")
+
+        with open(meta_dir, "w") as f:
+            json.dump(meta_data, f, indent=4)
+
+
+def scrape_station_metadata(region_code: str):
     region_code = check_valid_region(region_code)
 
     print(f"Region Code is Valid, Getting river stations in area {region_code}...")
     target_link = f"https://www.dws.gov.za/hydrology/Verified/HyStations.aspx?Region={region_code}&StationType=rbRiver"
-    print(target_link)
-    return
 
     r = re.get(target_link)
 
@@ -230,6 +317,28 @@ def text_to_dataframe(raw_text):
             continue
 
     return pd.DataFrame(processed_data)
+
+
+def scrape_many_stations(station_codes, overwrite=False):
+
+    for station in station_codes:
+        if not overwrite:
+            # Check if it exists already, then dont scrape
+            entries = os.listdir("./data/stream_flow_data/daily/")
+            saved_stations = [
+                elem.split(".")[0].strip() for elem in entries if elem[-4:] == ".csv"
+            ]
+
+            if station in saved_stations:
+                print(station, "Already Saved, Skipping...")
+                continue
+
+        faulty_stations = ["G2H013"]
+        if station in faulty_stations:
+            continue
+
+        print("Scraping Data For", station)
+        scrape_stream_flow(station)
 
 
 def scrape_stream_flow(station_code: str, start_date=None, end_date=None, silent=False):
@@ -462,9 +571,7 @@ def scrape_area(region_code):
     with open(f"./data/station_data/river/region_{region_code}.json", "r") as file:
         station_data = json.load(file)
 
-    directory_path = (
-        "./data/stream_flow_data/daily/"  # Replace with your directory path
-    )
+    directory_path = "./data/stream_flow_data/daily/"
 
     # Get all entries (files and directories)
     all_entries = os.listdir(directory_path)
@@ -510,22 +617,280 @@ def scrape_area(region_code):
             print(station)
 
 
+def messing_around():
+    entries = os.listdir("./data/stream_flow_data/daily/")
+    csv_files = [elem for elem in entries if elem.strip()[-4:] == ".csv"]
+
+    area_code_dict = {}
+    station_meta_data_path = "./data/station_data/river/"
+
+    for file in csv_files:
+        area_code = check_valid_region(file[0])
+
+        print(area_code)
+    pass
+
+
+def get_stations_by_study_area(area_coords):
+
+    # First Extract All Station Meta Data Into One Big List
+    station_meta = []
+    meta_dir = "./data/station_data/river/"
+    all_entries = os.listdir(meta_dir)
+    json_files = [elem for elem in all_entries if elem[-5:] == ".json"]
+
+    for file in json_files:
+        with open(os.path.join(meta_dir, file), "r") as tf:
+            data = json.load(tf)
+
+        for elem in data:
+            station_meta.append(elem)
+
+    station_codes_inside = []
+    for station in station_meta:
+
+        inside = (
+            (float(station["lat"]) >= area_coords["lat_min"])
+            & (float(station["lat"]) <= area_coords["lat_max"])
+            & (float(station["long"]) >= area_coords["lon_min"])
+            & (float(station["long"]) <= area_coords["lon_max"])
+        )
+
+        if inside:
+            station_codes_inside.append(station["code"])
+
+    return station_codes_inside
+
+
+def plot_stations_by_codes(codes):
+    # First Extract All Station Meta Data Into One Big List
+    station_meta = []
+    meta_dir = "./data/station_data/river/"
+    all_entries = os.listdir(meta_dir)
+    json_files = [elem for elem in all_entries if elem[-5:] == ".json"]
+
+    for file in json_files:
+        with open(os.path.join(meta_dir, file), "r") as tf:
+            data = json.load(tf)
+
+        for elem in data:
+            station_meta.append(elem)
+
+    target_meta_data = []
+    for code in codes:
+        for station in station_meta:
+            if code == station["code"]:
+                target_meta_data.append(
+                    {
+                        "code": code,
+                        "lat": station["lat"],
+                        "lon": station["long"],
+                    }
+                )
+
+    df = pd.DataFrame(target_meta_data)
+
+    # Must convert to numeric columns...
+    df["lat"] = pd.to_numeric(df["lat"])
+    df["lon"] = pd.to_numeric(df["lon"])
+
+    # Create a base map centered on the mean coordinates
+    center_lat = df["lat"].mean()
+    center_lon = df["lon"].mean()
+
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=7)
+
+    # Add markers for each station
+    for idx, row in df.iterrows():
+        folium.Marker(
+            location=[row["lat"], row["lon"]],
+            popup=row["code"],
+            tooltip=row["code"],
+        ).add_to(m)
+
+    # Save the map
+    save_file = "area_of_study_map.html"
+    m.save(save_file)
+    print(f"Interactive map saved as {save_file}")
+
+    pass
+
+
+def avg_data_many_stations(station_codes):
+
+    daily_dir = "./data/stream_flow_data/daily/"
+    entries = os.listdir(daily_dir)
+    csv_files = [elem for elem in entries if elem[-4:] == ".csv"]
+
+    for station in station_codes:
+        for file in csv_files:
+            if station == file.split(".")[0].strip():
+                average_data(os.path.join(daily_dir, file))
+
+
+def calc_sdi_many_stations(station_codes):
+    faulty_stations = ["G2H013"]
+    list_of_dfs = []
+
+    for station in station_codes:
+
+        if station in faulty_stations:
+            continue
+        target_file = f"./data/stream_flow_data/monthly/{station}.csv"
+        # Extract Data
+        df = pd.read_csv(target_file)
+
+        # Calc SDI
+        list_of_dfs.append(calc_sdi(df))
+
+    big_sdi_df = pd.concat(list_of_dfs)
+
+    # Assuming your dataframe is named 'df'
+    # Group by year and month, calculate mean SPI, and rename to SDI
+    result_df = big_sdi_df.groupby(["year", "month"], as_index=False)["SDI"].mean()
+
+    # Keep only the required columns
+    result_df = result_df[["year", "month", "SDI"]]
+
+    # Dropping first block of NaN values
+    # 1. Find the index of the first row that does NOT have a NaN in the 'SDI' column
+    first_valid_row_index = result_df["SDI"].first_valid_index()
+
+    # 2. Slice the DataFrame from that index to the end
+    #    This automatically drops all preceding NaN records.
+    result_df = result_df.loc[first_valid_row_index:]
+
+    print(result_df.head(20))
+    print(f"\nShape: {result_df.shape}")
+    print(f"\nTotal rows: {len(result_df)}")
+    return result_df
+
+
+def validate_sdi(df: pd.DataFrame) -> None:
+    """
+    Validate SDI dataframe with columns: year, month, SDI.
+    Prints validation results to console.
+    """
+    print("SDI Data Validation Report")
+    print("=" * 35)
+
+    # 1. Column check
+    expected_cols = {"year", "month", "SDI"}
+    print(f"Has expected columns: {set(df.columns) >= expected_cols}")
+
+    # 2. Range check (SDI typically ranges from -3 to +3, but can exceed)
+    min_val = df["SDI"].min()
+    max_val = df["SDI"].max()
+    print(
+        f"SDI values typically between -3 & 3. They are between: [{min_val:.4f}, {max_val:.4f}]"
+    )
+    extreme_count = ((df["SDI"] < -3) | (df["SDI"] > 3)).sum()
+    print(
+        f"Values outside [-3, 3] range: {extreme_count} ({extreme_count/len(df)*100:.1f}%)"
+    )
+
+    # 3. Temporal order check
+    ordered = df.sort_values(["year", "month"]).equals(df)
+    print(f"Data ordered by year/month: {ordered}")
+
+    # 4. Mean sanity (SDI should have mean close to 0)
+    mean_val = df["SDI"].mean()
+    print(f"Mean SDI: {mean_val:.3f} (should be close to 0: {-0.5 <= mean_val <= 0.5})")
+
+    # 5. Standard deviation check (SDI should have std close to 1)
+    std_val = df["SDI"].std()
+    print(f"Std Dev SDI: {std_val:.3f} (should be close to 1: {0.8 <= std_val <= 1.2})")
+
+    # 6. Missing values
+    has_missing = df.isna().any().any()
+    if has_missing:
+        print("Data Frame Has Missing Values...")
+        nan_df = df[df.isnull().any(axis=1)]
+        for index, row in nan_df.iterrows():
+            print(
+                f"\tNaN Record: #{index}: (year, month) = ({int(row['year'])}, {int(row['month'])})"
+            )
+        print("\tImputing With Mean Value...")
+        df = df.fillna(df.mean())
+        print(f"\tNo missing values: {not df.isna().any().any()}")
+    else:
+        print(f"\tNo missing values: True")
+
+    # 7. Drought/wet condition distribution
+    if not df.empty and not df["SDI"].isna().all():
+        drought_severe = (df["SDI"] <= -1.5).sum()
+        drought_moderate = ((df["SDI"] > -1.5) & (df["SDI"] <= -1.0)).sum()
+        normal = ((df["SDI"] > -1.0) & (df["SDI"] < 1.0)).sum()
+        wet_moderate = ((df["SDI"] >= 1.0) & (df["SDI"] < 1.5)).sum()
+        wet_severe = (df["SDI"] >= 1.5).sum()
+
+        total = len(df)
+        print(f"Condition distribution:")
+        print(
+            f"\tSevere drought (SDI ≤ -1.5): {drought_severe} ({drought_severe/total*100:.1f}%)"
+        )
+        print(
+            f"\tModerate drought (-1.5 < SDI ≤ -1.0): {drought_moderate} ({drought_moderate/total*100:.1f}%)"
+        )
+        print(f"\tNormal (-1.0 < SDI < 1.0): {normal} ({normal/total*100:.1f}%)")
+        print(
+            f"\tModerately wet (1.0 ≤ SDI < 1.5): {wet_moderate} ({wet_moderate/total*100:.1f}%)"
+        )
+        print(f"\tSeverely wet (SDI ≥ 1.5): {wet_severe} ({wet_severe/total*100:.1f}%)")
+    else:
+        print("Condition distribution skipped (no valid data)")
+
+    print("=" * 35)
+
+
 def main():
+
+    study_area_coords = {
+        "lat_max": -30.7,
+        "lat_min": -34.83,
+        "lon_min": 17.85,
+        "lon_max": 21.17,
+    }
+
+    station_codes = get_stations_by_study_area(study_area_coords)
+
+    # return
+    # plot_stations_by_codes(station_codes)
+    # scrape_many_stations(station_codes)
+
+    # avg_data_many_stations(station_codes)
+
+    final = calc_sdi_many_stations(station_codes)
+    validate_sdi(final)
+
+    # Save Data
+    save_dataframe(final, "./data/sdi_data/sdi.csv", debug=True)
+
+    return
+
+    # scrape_all_breede_olifant_stations()
+    # messing_around()
+    # return
 
     # data = pd.read_csv("./data/stream_flow_data/monthly/B1H012.csv")
     # print(data.head())
     # return
-    # scrape_river_stations("H")
+    # scrape_station_metadata("H")
+
+    # ==================== Plot Stations In Area ====================
+    # areas = ["A", "H", "V"]
+    # plot_stations(areas)
     # return
 
     # ==================== Scrape All Stations In Area ====================
-
     # scrape_area("K")
     # return
 
     # ==================== Scrape Station ====================
+
+    scrape_many_stations(["G2H040"])
     # scrape_stream_flow("G2H040")
-    # return
+    return
 
     # ==================== Convert Daily Streamflow To Monthly Streamflow ====================
     # average_data("./data/stream_flow_data/daily/B1H012.csv")
