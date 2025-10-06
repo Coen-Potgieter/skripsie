@@ -1448,7 +1448,6 @@ runEM(const size_t m, const std::vector<std::vector<int>> &observedAttributes,
         oldLogLik = newLogLik;
 
         // ================== Print Loop Information ==================
-
         if (debug) {
             std::cout << "Iteration " << numIter << '\n';
             printVector(oldPriors, "Old Priors");

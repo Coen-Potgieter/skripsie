@@ -3,4 +3,36 @@
 \chapter{Results}
 \label{chap:results}
 
-\paragraph{TODO: NOT FINISHED}
+
+\section{Qualatative Results}
+Going to see if model output can identify these well known droughts happened in the years: 1983-84, 1991-92, 1994-95, 2014-16, and 2017-18,
+Lets just begin plotting things...
+
+\section{Quantattive Results}
+Going to see if model output can identify these well known droughts happened in the years: 1983-84, 1991-92, 1994-95, 2014-16, and 2017-18,
+
+Here we can do the Accuracy Analysis where we use a metric called Production Correct (PC), which directly compares to SPI, SDI, and NDVI....
+
+All of the above requires viterbi output. What should I use MPM output for? Should I use it?
+
+
+\section{Gauge Uncertain periods}
+
+here we can use MPM output as a “confidence lens” \\
+MPM gives per-timestep marginal posterior probabilities. \\
+You can exploit that to show model uncertainty — how confident the DNBC was in each classification.
+For example:
+
+\begin{enumerate}
+    \item Plot both MPM and Viterbi on the same time series → when they disagree, that’s an uncertain period.
+    \item Show a heatmap or shaded region over time representing the MPM confidence for the chosen (Viterbi) class.
+    \item Mention that Viterbi is used for evaluation, but MPM helps interpret reliability.
+\end{enumerate}
+
+
+
+
+
+
+
+
