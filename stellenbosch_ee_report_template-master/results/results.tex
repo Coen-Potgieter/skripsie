@@ -3,6 +3,65 @@
 \chapter{Results}
 \label{chap:results}
 
+\section{Graphs to show}
+
+\begin{enumerate}
+    \item MODEL SELECTION GRAPH ✓
+    \item Viterbi Output with known drought periods shaded ✓
+    \item All indices with their classification shaded and MPM output shaded for our index below.
+    \item Correlation with individual indices
+\end{enumerate}
+
+\section{HERE ARE SOME LEKKER PLOTS}
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=\linewidth]{model-select-plot.png}
+    \caption[TODO]{TODO}
+    \label{fig:model-select-plot}
+\end{figure}
+
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=\linewidth]{model-output-time-series.png}
+    \caption[TODO]{TODO}
+    \label{fig:model-output-time-series}
+\end{figure}
+
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=\linewidth]{indcies-time-series.png}
+    \caption[TODO]{TODO}
+    \label{fig:indcies-time-series}
+\end{figure}
+
+
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=\linewidth]{confusion-matrices.png}
+    \caption[TODO]{TODO}
+    \label{fig:confusion-matrices}
+\end{figure}
+
+
+\begin{table}[!h]
+\centering
+\caption{Performance Metrics Comparison of Drought Indicators}
+\label{tab:performance_metrics}
+\begin{tabular}{lccccc}
+\toprule
+Indicator & PC (\%) & Accuracy (\%) & Precision (\%) & Recall (\%) & F1 Score (\%) \\
+\midrule
+SPI       & 53.79   & 53.78         & 31.70          & 53.79       & 39.89         \\
+SDI       & 63.64   & 46.00         & 29.37          & 63.64       & 40.19         \\
+NDVI      & 68.94   & 33.48         & 25.42          & 68.94       & 37.14         \\
+DNBC Viterbi   & 57.58   & 51.40         & 31.02          & 57.58       & 40.32         \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Qualatative Results}
 Going to see if model output can identify these well known droughts happened in the years: 1983-84, 1991-92, 1994-95, 2014-16, and 2017-18,

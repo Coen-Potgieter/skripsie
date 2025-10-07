@@ -159,9 +159,9 @@ int main(int, char *argv[]) {
         double epsilon = 1 * std::pow(10, -4);
         std::cout << epsilon << '\n';
 
-        bool runModelSelection = true;
-        std::pair<int, int> modelSelectRange = std::make_pair(2, 8);
-        size_t m = 5;
+        bool runModelSelection = false;
+        std::pair<int, int> modelSelectRange = std::make_pair(2, 10);
+        size_t m = 3;
 
         //*********************************************************
         // Load In Data
@@ -551,28 +551,15 @@ void processAndSaveModelOutput(
     size_t m = finalPriors.size();
 
     // ==================== MPM Rule ====================
-    std::vector<int> MPMrule;
+    std::vector<std::vector<double>> MPMrule(T, std::vector<double>(m, 0.0));
     for (size_t t = 0; t < T; t++) {
         rcptr<Factor> qSt =
             queryLBU_CG(cg, msgs, {droughtStateRvIDs.at(t)})->normalize();
 
-        // Find Max Confidence of p(S_t)
-        double maxConf = 0.0;
-        int maxVal = -1;
         for (int i = 1; i <= m; i++) {
-            double currConf = qSt->potentialAt({droughtStateRvIDs.at(t)}, {i});
-            if (currConf > maxConf) {
-                maxConf = currConf;
-                maxVal = i;
-            }
+            MPMrule[t][i - 1] =
+                qSt->potentialAt({droughtStateRvIDs.at(t)}, {i});
         }
-
-        // Add Max Value
-        if (maxVal == -1)
-            throw std::runtime_error(
-                "Extracting Of Drought States Went Wrong...");
-
-        MPMrule.push_back(maxVal);
     }
 
     // ==================== Vertibi ====================
@@ -615,10 +602,19 @@ void processAndSaveModelOutput(
         throw std::invalid_argument("Could Not Access: `" +
                                     std::string(dirPath) + '`');
 
-    fout << "St\n";
+    for (size_t i = 1; i <= m; i++) {
+        fout << "S_" << i;
+
+        if (i != m) fout << ',';
+    }
+    fout << '\n';
     for (size_t t = 0; t < T; t++) {
-        // Populate CSV with value
-        fout << MPMrule.at(t) << '\n';
+        for (size_t i = 0; i < m; i++) {
+            // Populate CSV with value
+            fout << MPMrule[t][i];
+            if (i != m - 1) fout << ',';
+        }
+        fout << '\n';
     }
     fout.close();
 
@@ -633,7 +629,7 @@ void processAndSaveModelOutput(
          << std::to_string(vertibiLogProb) << '\n';
     for (size_t t = 1; t < T; t++) {
         // Populate CSV with value
-        fout << vertibiPath.at(t) << ",\n";
+        fout << vertibiPath.at(t) + 1 << ",\n";
     }
     fout.close();
 }

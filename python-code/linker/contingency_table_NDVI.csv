@@ -1,0 +1,5 @@
+NDVI_Category,State 1,State 2,State 3,State 4,State 5,State 6,All
+Bare soil / water,0,1,0,22,0,0,23
+Moderate vegetation,23,6,7,0,56,13,105
+Sparse vegetation,49,47,112,7,80,40,335
+All,72,54,119,29,136,53,463

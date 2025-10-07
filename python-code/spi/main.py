@@ -211,8 +211,7 @@ def get_stations_by_area(area_coords):
     return filtered_df
 
 
-def avg_spi_by_station_names(station_names):
-
+def avg_spi_by_station_names(station_names, k=3):
     df = pd.read_csv("./data/DWSmon.csv")
 
     # The most performant way is to append each small DataFrame to a list during the loop,
@@ -221,7 +220,7 @@ def avg_spi_by_station_names(station_names):
     for name in station_names:
 
         station_df = df[df["station"] == name]
-        station_spi = calculate_spi_station(station_df, scale=3)
+        station_spi = calculate_spi_station(station_df, scale=k)
         list_of_dfs.append(station_spi)
 
     # Convert List To Big DataFrame
@@ -351,7 +350,7 @@ def main():
     # ==================== Exrtact by Station Names ====================
     # Need a list of station names here
     station_names = stations_in_study_area["NameUsed"].to_list()
-    avg_spi_df = avg_spi_by_station_names(station_names)
+    avg_spi_df = avg_spi_by_station_names(station_names, k=3)
 
     validate_spi(avg_spi_df)
 
