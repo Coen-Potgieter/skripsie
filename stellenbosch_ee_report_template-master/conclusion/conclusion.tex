@@ -4,3 +4,15 @@
 \label{chap:conclusion}
 
 \paragraph{TODO: NOT FINISHED}
+While it doesn't appear to be a complete success, it provides valuable insights into the behavior and limitations of the Dynamic Naive Bayes Classifier (DNBC) for this task.
+ The model's rapid switching does not reflect this physical reality, suggesting it may be over-reacting to short-term noise in the input data rather than capturing the underlying climatological state.
+
+## Conclusion on Model Performance
+
+In summary, the DNBC, as implemented, demonstrates a partial ability to detect drought conditions. It successfully identifies recent, severe droughts but struggles with consistency and stability across the entire historical record.
+
+Its primary limitations are an **unrealistic temporal volatility** and a **high rate of false alarms**. These results suggest that while the model is capturing some relevant signals, it is either overly sensitive to noise in the input indicators or the model structure itself (e.g., the assumptions of the Naive Bayes classifier or the learned transition probabilities) is not robust enough to represent the persistent nature of drought. Further refinement, such as temporal smoothing of the output or incorporating model parameters that enforce state persistence, would be necessary to improve its practical utility as a composite indicator.
+
+
+\textbf{Summary:}  
+The DNBC model, with $m = 6$ latent states, successfully encapsulates the cyclical nature of South African drought dynamics. While the temporal output remains somewhat oscillatory due to noisy inputs, the probabilistic framework provides a balanced and interpretable representation of drought evolution. Quantitatively, the model outperforms the individual indices across key performance metrics, confirming that combining multiple drought sources via latent-state modelling yields a modest but meaningful improvement in predictive robustness.

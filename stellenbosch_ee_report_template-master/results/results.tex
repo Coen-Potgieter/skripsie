@@ -3,92 +3,102 @@
 \chapter{Results}
 \label{chap:results}
 
-\section{Graphs to show}
+The following chapter presents the results obtained from the DNBC. The analysis begins with model selection then moves to qualitative assessment of state outputs, and finally to a quantitative evaluation of the model’s classification performance against the input drought indices used as a benchmark.
 
-\begin{enumerate}
-    \item MODEL SELECTION GRAPH ✓
-    \item Viterbi Output with known drought periods shaded ✓
-    \item All indices with their classification shaded and MPM output shaded for our index below.
-    \item Correlation with individual indices
-\end{enumerate}
+\section{Model Selection \& State Definition}
 
-\section{HERE ARE SOME LEKKER PLOTS}
+The optimal number of latent states was found to be $6$. Selection criteria stipulated in Section~\ref{sec:model_selection} was met on all fronts as Figure~\ref{fig:model-select-plot} shows a minimum value of both BIC and AIC are found at $m=6$. Additionally, the graph shows a pronounced jump in log-likelihood improvement at this point. While the log-likelihood continues to increase for larger $m$, the marginal gains are smaller for $m$ values greater than $6$ which may suggest that those models have too many parameters. 
 
 \begin{figure}[!h]
     \centering
-    \includegraphics[width=\linewidth]{model-select-plot.png}
-    \caption[TODO]{TODO}
+    \includegraphics[width=0.6\linewidth]{model-select-plot.png}
+    \caption[Model Selection Plot]{Plot of AIC, BIC and maximum log-likelihood across $m$ (number of hidden states)}
     \label{fig:model-select-plot}
 \end{figure}
 
+Thus, subsequent analyses use $m = 6$, corresponding to the following classification of latent states:
+\[
+\begin{aligned}
+1 &: (S3D) \equiv \text{Extreme Drought}, \\
+2 &: (S2D) \equiv \text{Moderate Drought}, \\
+3 &: (S1D) \equiv \text{Mild Drought}, \\
+4 &: (S1W) \equiv \text{Mild Wet}, \\
+5 &: (S2W) \equiv \text{Moderate Wet}, \\
+6 &: (S3W) \equiv \text{Extreme Wet.}
+\end{aligned}
+\]
+
+\section{Model Behaviour}
+
+\subsection{Latent-State Sequence Output}
+
+Figure~\ref{fig:model-output-time-series} presents the Viterbi-decoded state sequence from 1981 to 2019, along with the known historical drought periods identified in literature that overlap with the model's output as shaded regions, that being 1983–1984, 1991–1992, 1994–1995, 2014–2016, and 2017–2018 
 
 \begin{figure}[!h]
     \centering
     \includegraphics[width=\linewidth]{model-output-time-series.png}
-    \caption[TODO]{TODO}
+    \caption[DNBC State Sequence]{Viterbi-decoded state sequence of DNBC with known drought periods as shaded regions }
     \label{fig:model-output-time-series}
 \end{figure}
 
+This plot shows that its performance in identifying historical drought periods is mixed, showing some promising signals but also significant weaknesses. There is a clear tendency for the model to enter higher states during the shaded periods which indicates that the model is successfully characterising these events.
+
+However, the model displays extreme volatility and oscillatory behaviour. The state sequence frequently fluctuates between the highest and lowest states over short periods. This is not reflective of real-world drought dynamics which persists over months or years. Furthermore, the model identifies many periods as "Extreme Drought" outside of the documented historical events. These occurrences are clear false positives, which greatly hinder the model's reliability for drought monitoring.
+
+\subsection{Model Confidence and Input Comparison}
+
+To better visualise the relationships between the input indices and the model output, Figure~\ref{fig:model-input-output} shows the SPI, SDI, and NDVI time series alongside the DNBC output. At each monthly time step, the DNBC's output has a confidence attached which is represented by the height of the vertical bar. This confidence is derived from the MPM Rule probabilities while the colour represents the classification which comes from the Viterbi output.
 
 \begin{figure}[!h]
     \centering
     \includegraphics[width=\linewidth]{indcies-time-series.png}
-    \caption[TODO]{TODO}
-    \label{fig:indcies-time-series}
+    \caption[Indices \& Model Output Time Series]{Drought classifications for the period 1981-2019 using SPI, SDI, NDVI, and DNBC (the vertical, coloured bars represent different drought states, while their height indicates the confidence in classification. The black lines plot the continuous values of SPI, SDI and NDVI)}
+    \label{fig:model-input-output}
 \end{figure}
 
+This graph on the other hand shows that the input indices themselves are inherently noisy and oscillatory, reflecting the high variability of environmental conditions and in turn the model output. This volatility could also contribute to the model's uncertain classifications that are present in the plot. Nonetheless, this probabilistic approach allows these uncertainties to be explicitly shown, which these standard indices lack.
 
+\section{Quantitative Evaluation}
+
+A quantitative evaluation was conducted by treating known drought events as a binary classification problem. For the period 1981–2019, each month was classified as either a drought, considered the positive class, or non-drought, the negative class. The predictions from the model and each input index were then compared against these historical classifications. The resulting confusion matrices are presented in Figure~\ref{fig:confusion-matrices}. Using these matrices, performance metrics were calculated and are summarised in Table~\ref{tbl:performance_metrics}.
 
 \begin{figure}[!h]
     \centering
     \includegraphics[width=\linewidth]{confusion-matrices.png}
-    \caption[TODO]{TODO}
+    \caption[Confusion Matrices]{Confusion matrices for classifying known drought states using (a) SPI, (b) SDI, (c) NDVI, (d) DNBC.}
     \label{fig:confusion-matrices}
 \end{figure}
 
-
 \begin{table}[!h]
-\centering
-\caption{Performance Metrics Comparison of Drought Indicators}
-\label{tab:performance_metrics}
-\begin{tabular}{lccccc}
-\toprule
-Indicator & PC (\%) & Accuracy (\%) & Precision (\%) & Recall (\%) & F1 Score (\%) \\
-\midrule
-SPI       & 53.79   & 53.78         & 31.70          & 53.79       & 39.89         \\
-SDI       & 63.64   & 46.00         & 29.37          & 63.64       & 40.19         \\
-NDVI      & 68.94   & 33.48         & 25.42          & 68.94       & 37.14         \\
-DNBC Viterbi   & 57.58   & 51.40         & 31.02          & 57.58       & 40.32         \\
-\bottomrule
-\end{tabular}
+    \centering
+    \caption[Performance Metrics of Input Indices \& DNBC]{Performance comparison of three input indices (SPI, SDI, NDVI) and the DNBC model in classifying drought events. The models are evaluated using four standard metrics: Recall, Accuracy, Precision, and F1 Score.}
+    \label{tbl:performance_metrics}
+    \begin{tabular}{lccccc}
+        \toprule
+        Indicator & Recall (\%) & Accuracy (\%) & Precision (\%)  & F1 Score (\%) \\
+        \midrule
+        SPI       & 53.79   & 53.78         & 31.70           & 39.89         \\
+        SDI       & 63.64   & 46.00         & 29.37           & 40.19         \\
+        NDVI      & 68.94   & 33.48         & 25.42           & 37.14         \\
+        DNBC      & 57.58   & 51.40         & 31.02           & 40.32         \\
+        \bottomrule
+    \end{tabular}
 \end{table}
 
-\section{Qualatative Results}
-Going to see if model output can identify these well known droughts happened in the years: 1983-84, 1991-92, 1994-95, 2014-16, and 2017-18,
-Lets just begin plotting things...
+\subsection{Performance Metrics and Interpretation}
 
-\section{Quantattive Results}
-Going to see if model output can identify these well known droughts happened in the years: 1983-84, 1991-92, 1994-95, 2014-16, and 2017-18,
+In this context, the metrics of Recall and Precision evaluate two distinct and critical aspects of model performance. Recall measures the model's ability to correctly identify actual drought events. Thus, high Recall is crucial for a warning system, as it means fewer droughts are missed. Conversely, Precision measures the reliability of the model's drought alarms as it indicates that when the model predicts a drought, it is likely to be correct. In practice, scoring high in Precision directly reduces false alarms and associated costs.
 
-Here we can do the Accuracy Analysis where we use a metric called Production Correct (PC), which directly compares to SPI, SDI, and NDVI....
+The F1-score is particularly informative in highly imbalanced datasets such as this one where drought events form a small fraction of the total. Additionally, accuracy can be misleading in this context, since a model that always predicts “no drought” could achieve high accuracy simply due to class imbalance. Hence, F1-score is the most appropriate performance metric for this application.
 
-All of the above requires viterbi output. What should I use MPM output for? Should I use it?
+The following observations can be made from the results:
 
-
-\section{Gauge Uncertain periods}
-
-here we can use MPM output as a “confidence lens” \\
-MPM gives per-timestep marginal posterior probabilities. \\
-You can exploit that to show model uncertainty — how confident the DNBC was in each classification.
-For example:
-
-\begin{enumerate}
-    \item Plot both MPM and Viterbi on the same time series → when they disagree, that’s an uncertain period.
-    \item Show a heatmap or shaded region over time representing the MPM confidence for the chosen (Viterbi) class.
-    \item Mention that Viterbi is used for evaluation, but MPM helps interpret reliability.
-\end{enumerate}
-
-
+\begin{itemize}
+    \item \textbf{NDVI:} Exhibits high Recall ($68.9\%$) but low Precision ($25.4\%$), indicating that it frequently identifies drought conditions, including many false alarms. This could be due to NDVI’s sensitivity to the agricultural aspect of drought, which can both lag or persist beyond meteorological drought. This will lead to overestimation.
+    \item \textbf{SPI:} Shows lower Recall ($53.8\%$) and moderate Precision ($31.7\%$), suggesting it provides a more conservative estimate of drought.
+    \item \textbf{SDI:} Achieves Recall ($63.6\%$) similar to NDVI but slightly better Precision ($29.4\%$). SDI therefore offers a slight improvement to the NDVI, as shown by the increased F1-score ($40.2\%$)
+    \item \textbf{DNBC Output (Viterbi):} Marginally achieves the highest F1-score ($40.3\%$), with Recall ($57.6\%$) and Precision ($31.0\%$). This indicates that the DNBC achieves a more stable trade-off between false alarms and missed events, suggesting that it captures the shared structure among the indices. 
+\end{itemize}
 
 
 

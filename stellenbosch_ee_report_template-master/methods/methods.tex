@@ -6,12 +6,16 @@
 \section{Data Acquisition}
 The development of a composite drought indicator requires careful selection of input variables that capture the different aspects of drought. Three indices were selected: the Standardised Precipitation Index (SPI) to represent meteorological drought, the Streamflow Drought Index (SDI) to represent hydrological drought, and the Normalised Difference Vegetation Index (NDVI) as a proxy for agricultural drought. These indices were chosen based on their widespread use in literature and the availability of data. Data scarcity is a challenge in South Africa, as openly accessible, long and consistent drought-related datasets are limited. Consequently, the choice of indices attempts to strike a balance between theory and pragmatic constraints~\cite{za_drought_review,za_drought_review2,dnbc_drought_first,dnbc_drought_second}.
 
+Fix only the last sentence, leave everyhting else as is
 \subsection{Sources}
+\label{sec:data_sources}
 To compute the SPI, monthly rainfall data was obtained from the University of Cape Town (UCT) dataset, which covers the period 1979–2019 (Dataset~\cite{uct_data}). The dataset provides rainfall values at station level. This offers a high degree of granularity across South Africa.
 
 For the SDI, daily streamflow records were obtained from the Department of Water and Sanitation (DWS), which maintains audited historic data regarding hydrology (Dataset~\cite{DWS_2011}). These daily records were averaged to create monthly records, which was then used to calculate the desired index.
 
 To obtain the NDVI, the NOAA Climate Data Record (CDR) of AVHRR Normalised Difference Vegetation Index (NDVI), Version~5 was used (Dataset~\cite{ndvi_data}). The dataset spans the period 1981–2025 and is provided in global NetCDF format. For the purposes of this study, only the South African subset was extracted. This required targeted downloading and filtering, given the large size of the global dataset.
+
+It is important to note that the overlapping period of the available data, and thus the scope for the model output spans from 1981 to 2019.
 
 \subsection{Preprocessing}
 
@@ -456,6 +460,7 @@ Each of the target parameters are now separated into their own terms and thus ca
 \end{equation}
 
 \subsection{Model Selection}
+\label{sec:model_selection}
 Model selection will involve determining the appropriate cardinality of each latent drought states $S_t$, that is, determining the value of $m$. When selecting $m$, a balance must be struck between model complexity and goodness of fit, as a larger value of $m$ gives the model a greater ability to capture subtle drought dynamics but risks overfitting. On the other hand, a smaller number may be too restrictive to reflect the underlying processes.
 
 To guide this choice, three complementary criteria are applied: the Akaike Information Criterion (AIC), the Bayesian Information Criterion (BIC), and the maximised log-likelihood of the fitted model. These are given by

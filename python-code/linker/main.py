@@ -614,8 +614,8 @@ def state_output_time_series(combined_df, shade_periods=None, shade_color="black
         marker="o",
         markersize=3,
     )
-    axes.set_ylabel("Hidden Drought States", fontweight="bold")
-    axes.set_xlabel(x_label, fontweight="bold")
+    axes.set_ylabel("Hidden Drought States", fontweight="bold", fontsize=18)
+    axes.set_xlabel(x_label, fontweight="bold", fontsize=18)
 
     axes.grid(True, alpha=0.3)
 
@@ -624,6 +624,8 @@ def state_output_time_series(combined_df, shade_periods=None, shade_color="black
         axes.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter("%Y"))
         axes.xaxis.set_major_locator(plt.matplotlib.dates.YearLocator(5))
         fig.autofmt_xdate()
+
+    axes.tick_params(axis="x", labelsize=12)  # Adjust the size as needed
 
     plt.tight_layout()
     plt.show()
@@ -958,7 +960,7 @@ def plot_index_with_categories(ax, dates, values, bins, colors, title, ylabel):
         color = colors[category]
         ax.axvspan(dates.iloc[-2], dates.iloc[-1], alpha=0.3, color=color, zorder=1)
 
-    ax.set_ylabel(ylabel, fontsize=10, fontweight="bold")
+    ax.set_ylabel(ylabel, fontsize=14, fontweight="bold")
     ax.set_title(title, fontsize=12, fontweight="bold")
     ax.grid(True, alpha=0.3, zorder=0)
     ax.tick_params(axis="x", rotation=45)
@@ -1003,17 +1005,25 @@ def plot_hmm_output(ax, dates, viterbi_states, mpm_probs, title):
         )
 
     ax.set_ylim(0, 1)
-    ax.set_ylabel("DNBC\nConfidence", fontsize=10, fontweight="bold")
+    ax.set_ylabel("DNBC\nConfidence", fontsize=14, fontweight="bold")
     ax.set_title(title, fontsize=12, fontweight="bold")
     ax.grid(True, alpha=0.3, zorder=0)
     ax.tick_params(axis="x", rotation=45)
 
+    state_names = [
+        "S3D",
+        "S2D",
+        "S1D",
+        "S1W",
+        "S2W",
+        "S3W",
+    ]
     # Create legend for states
     legend_elements = [
-        mpatches.Patch(facecolor=colors[i], label=f"State {i+1}")
+        mpatches.Patch(facecolor=colors[i], label=state_names[i])
         for i in range(n_states)
     ]
-    ax.legend(handles=legend_elements, loc="upper right", ncol=n_states, fontsize=8)
+    ax.legend(handles=legend_elements, loc="upper right", ncol=n_states, fontsize=10)
 
 
 def visualise_indices(combined_df):
@@ -1070,7 +1080,8 @@ def visualise_indices(combined_df):
     )
 
     # Set common x-label
-    axes[3].set_xlabel("Date", fontsize=12)
+    axes[3].set_xlabel("Date", fontsize=14, fontweight="bold")
+    axes[3].tick_params(axis="x", labelsize=10)
 
     # Adjust layout
     plt.tight_layout()
@@ -1657,7 +1668,7 @@ def calc_pc(combined_df):
     STATE_DROUGHT_MAPPING = {
         1: True,  # State 1 is drought
         2: True,  # State 2 is drought
-        3: True,  # State 3 is not drought
+        3: True,  # State 3 is drought
         4: False,  # State 4 is not drought
         5: False,  # State 5 is not drought
         6: False,  # State 6 is drought
@@ -1696,6 +1707,7 @@ def main():
     # plot_model_selection("../../data/synthetic/modelSelection.csv")
     # plot_model_selection("../../data/real/modelSelection.csv")
     # plot_model_selection("../../data/real/r_model_selection.csv")
+    # plot_model_selection("../../data/real/r_model_selection_fake.csv")
     # return
 
     # ==================== Plot Viterbi Output Vs Known Drought States (Graph 2) ====================
@@ -1706,10 +1718,10 @@ def main():
     # return
 
     # ==================== Plot Indices & Drought Output (Graph 3) ====================
-    # combined_df = combine_outputs()
-    # visualise_indices(combined_df)
+    combined_df = combine_outputs()
+    visualise_indices(combined_df)
 
-    # return
+    return
 
     # ==================== PC & Confusion Matrices (Graph 4) ====================
 
