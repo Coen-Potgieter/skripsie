@@ -8,4 +8,30 @@ This is an appendix.
 \makeatletter\@mkboth{}{Appendix}\makeatother
 \label{appen:derivations_bigramseg}
 
-This is another appendix.
+This section outlines how the required Engineering Council of South Africa (ECSA) Graduate Attributes (GAs) were achieved throughout this project, with reference to the relevant report sections.
+
+\subsection*{GA 1: Problem Solving}
+The project addressed the complex problem of drought monitoring in South Africa by developing a composite drought indicator using a probabilistic framework. This required identifying limitations in existing single-index approaches and formulating a model that could integrate multiple data sources (Section~\ref{chap:introduction}). The problem was analytically framed in probabilistic terms through the use of a Dynamic Naive Bayes Classifier (DNBC), where latent drought states were inferred from observable indices (Section~\ref{sec:model_design}). The integration of time‐dependent stochastic modelling with environmental indices demonstrates the author’s ability to identify, analyse, and solve a complex, multidisciplinary problem.
+
+\subsection*{GA 2: Application of Scientific and Engineering Knowledge}
+The work applied mathematical, statistical, and computational knowledge to design and implement the DNBC. This included understanding and utilising probabilistic models, Bayesian inference, and the Expectation–Maximisation (EM) algorithm (Section~\ref{sec:model_design} \& Section~\ref{sec:param_estimation}). Furthermore, hydrological, meteorological, and remote‐sensing knowledge was applied to compute the Standardised Precipitation Index (SPI), Streamflow Drought Index (SDI), and Normalised Difference Vegetation Index (NDVI) (Section~\ref{sec:index-calc}). The synthesis of these diverse scientific domains illustrates the application of fundamental engineering and scientific principles to solve a real‐world environmental problem.
+
+\subsection*{GA 3: Engineering Design}
+The project required the procedural and non‐procedural design of a data‐driven system for drought classification. The DNBC architecture, including its latent and observed variable structure, was conceptualised and implemented to model the probabilistic dependencies between drought‐related indices (Section~\ref{sec:model_design}). The model design process involved iterative refinement, guided by model selection criteria such as the Akaike Information Criterion (AIC) and Bayesian Information Criterion (BIC) (Section~\ref{sec:model_selection}). This process reflects a structured design methodology that balances theoretical soundness with practical data limitations.
+
+\subsection*{GA 4: Investigations, Experiments and Data Analysis}
+Significant experimental investigation was performed throughout the project. This included data acquisition and preprocessing (Section~\ref{sec:data_acquisition}), index computation and discretisation (Section~\ref{sec:index-calc}), and model training and evaluation (Section~\ref{chap:results}). The author conducted quantitative analyses such as precision, recall, and F1‐score calculations to evaluate model performance. The qualitative assessment of temporal drought patterns further supported the interpretation of results. Together, these demonstrate competence in designing and conducting investigations and drawing valid, data‐driven conclusions.
+
+\subsection*{GA 5: Engineering Methods, Skills and Tools, Including Information Technology}
+This project required extensive use of computational tools and programming to achieve its results. The DNBC and its associated algorithms (EM, Viterbi, and Junction Tree) were implemented from first principles in \texttt{C++} using the \texttt{emdw} library. Furthermore, data processing and visualisation were implemented using \texttt{Python}  accompanied by libraries such as \texttt{NumPy}, \texttt{pandas}, and \texttt{matplotlib}. The use of probabilistic graphical model theory, statistical computing, and open‐source tools highlights the author’s proficiency in modern engineering methods and IT‐based tools (Section~\ref{sec:model_implementation}).
+
+\subsection*{GA 6: Professional and Technical Communication}
+The author engaged in weekly in‐person meetings with their supervisor to discuss progress, challenges, and next steps, ensuring clear and professional communication throughout the project. This report itself serves as a demonstration of formal technical writing ability, integrating complex mathematical and engineering concepts in a structured and coherent manner. The final oral presentation and project open day will further demonstrate the author’s ability to communicate technical findings effectively to both academic and professional audiences.
+
+\subsection*{GA 8: Individual Work}
+The project was completed entirely by the author, including the research, model design, coding, analysis, and report writing. While guidance was provided by their supervisor, all implementation and problem‐solving were conducted independently. This demonstrates the author’s ability to plan, manage, and execute complex engineering tasks independently (Sections~\ref{chap:introduction}–\ref{chap:conclusion}).
+
+\subsection*{GA 9: Independent Learning Ability}
+The project required extensive self‐directed learning in several unfamiliar domains. The author independently studied advanced probabilistic models such as Hidden Markov Models (HMMs), DNBCs, and associated algorithms including the Forward–Backward and Baum–Welch algorithms (Section~\ref{sec:model_development}). Additionally, significant effort was spent understanding drought indices (SPI, SDI, NDVI), their derivation, and interpretation within the South African context (Section~\ref{sec:index-calc}). This demonstrates a high level of independent learning ability and adaptability to new technical challenges.
+
+

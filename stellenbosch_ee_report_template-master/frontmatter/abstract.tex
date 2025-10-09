@@ -4,12 +4,26 @@
 
 \subsubsection*{English}
 
-The English abstract.
+Drought is a recurring and complex environmental challenge in South Africa, impacting agriculture, water security, and socio‐economic stability. Existing monitoring systems often rely on individual indicators that capture only isolated dimensions of drought behaviour. This project develops a probabilistic, composite drought indicator using a Dynamic Naive Bayes Classifier (DNBC) to integrate three key indices: the Standardised Precipitation Index (SPI), Streamflow Drought Index (SDI), and Normalised Difference Vegetation Index (NDVI). Together, these represent meteorological, hydrological, and agricultural dimensions of drought.
+
+The model was implemented for the period 1981–2019 in the Western Cape using open‐source rainfall, streamflow, and remote‐sensing datasets. Each index was computed, preprocessed, and discretised to serve as observed variables, while latent drought states were inferred through parameter estimation. This was done using the Expectation–Maximisation (EM) algorithm with Junction Tree (JT) inference. Model selection was guided by information criteria which identified six latent drought states representing varying degrees of dryness and wetness.
+
+Results show that the DNBC successfully identified major historical drought periods in South Africa, demonstrating comparable, and in some respects improved, performance relative to the individual input indices. Quantitatively, the DNBC achieved the highest F1‐score, indicating a stronger balance between sensitivity and precision under highly imbalanced data conditions. Although the model exhibited oscillatory behaviour not reflective of drought dynamics and produced false alarms, it successfully captured the abstract dimensions of drought. 
+
+The study concludes that a probabilistic approach such as the DNBC offers a valuable foundation for operational drought monitoring, particularly due to its ability to express uncertainty in classification. Future work should focus on improving data quality, incorporating continuous variables, and extending the framework to additional drought indicators to promote stability and robustness.
+
 
 \selectlanguage{afrikaans}
 
 \subsubsection*{Afrikaans}
 
-Die Afrikaanse uittreksel.
+Droogte is ’n herhalende en komplekse omgewingsuitdaging in Suid‐Afrika wat landbou, watersekerheid en sosio‐ekonomiese stabiliteit beïnvloed. Bestaande moniteringstelsels steun dikwels op individuele aanwysers wat slegs beperkte aspekte van droogtegedrag vasvang. Hierdie projek ontwikkel ’n waarskynlikheidsgebaseerde, saamgestelde droogte‐aanwyser deur middel van ’n Dynamic Naive Bayes Classifier (DNBC) om drie sleutelindekse te integreer: die Standardised Precipitation Index (SPI), Streamflow Drought Index (SDI) en Normalised Difference Vegetation Index (NDVI). Saam verteenwoordig hierdie indekse die meteorologiese, hidrologiese en landboukundige dimensies van droogte.
+
+Die model is vir die tydperk 1981–2019 in die Wes‐Kaap geïmplementeer met behulp van oopbron reënval-, stroomvloeien- en afstandwaarnemingsdatastelle. Elke indeks is bereken, voorafverwerk en gediskretiseer om as waargenome veranderlikes te dien, terwyl latente droogtetoestande afgelei is deur middel van parameterberaming. Dit is uitgevoer met die Expectation–Maximisation (EM) algoritme saam met Junction Tree (JT) inferensie. Modelseleksie is gelei deur inligtingsteoretiese kriteria wat ses latente toestande geïdentifiseer het wat verskillende vlakke van droogheid en natheid voorstel.
+
+Die resultate toon dat die DNBC suksesvol groot historiese droogteperiodes in Suid‐Afrika geïdentifiseer het en vergelykbare, en in sekere opsigte verbeterde, prestasie gelewer het relatief tot die individuele insetindekse. Kwantitatief het die DNBC die hoogste F1‐telling behaal, wat ’n beter balans tussen sensitiwiteit en presisie aandui in ’n sterk ongebalanseerde datastel. Alhoewel die model ossillerende gedrag getoon het wat nie droogtedinamika akkuraat weerspieël nie en valse alarms gegenereer het, het dit die abstrakte dimensies van droogte effektief vasgevang.
+
+Die studie kom tot die gevolgtrekking dat ’n waarskynlikheidsbenadering soos die DNBC ’n waardevolle grondslag bied vir operasionele droogtemonitering, veral vanweë sy vermoë om onsekerheid in klassifikasie uit te druk. Toekomstige werk behoort te fokus op die verbetering van datagehalte, die inkorporering van deurlopende veranderlikes, en die uitbreiding van die raamwerk na addisionele droogte‐aanwysers om stabiliteit en robuustheid te bevorder.
+
 
 \selectlanguage{english}

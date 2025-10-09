@@ -43,7 +43,7 @@ Figure~\ref{fig:model-output-time-series} presents the Viterbi-decoded state seq
 
 This plot shows that its performance in identifying historical drought periods is mixed, showing some promising signals but also significant weaknesses. There is a clear tendency for the model to enter higher states during the shaded periods which indicates that the model is successfully characterising these events.
 
-However, the model displays extreme volatility and oscillatory behaviour. The state sequence frequently fluctuates between the highest and lowest states over short periods. This is not reflective of real-world drought dynamics which persists over months or years. Furthermore, the model identifies many periods as "Extreme Drought" outside of the documented historical events. These occurrences are clear false positives, which greatly hinder the model's reliability for drought monitoring.
+However, the model displays extreme volatility and oscillatory behaviour. The state sequence frequently fluctuates between the highest and lowest states over short periods. This is not reflective of real world drought dynamics which persists over months or years. Furthermore, the model identifies many periods as ``Extreme Drought" outside of the documented historical events. These occurrences are clear false positives, which greatly hinder the model's reliability for drought monitoring.
 
 \subsection{Model Confidence and Input Comparison}
 
@@ -65,7 +65,7 @@ A quantitative evaluation was conducted by treating known drought events as a bi
 \begin{figure}[!h]
     \centering
     \includegraphics[width=\linewidth]{confusion-matrices.png}
-    \caption[Confusion Matrices]{Confusion matrices for classifying known drought states using (a) SPI, (b) SDI, (c) NDVI, (d) DNBC.}
+    \caption[Confusion Matrices For Drought Classifications of Input Indices \& DNBC]{Confusion matrices for classifying known drought states using (a) SPI, (b) SDI, (c) NDVI, (d) DNBC.}
     \label{fig:confusion-matrices}
 \end{figure}
 
@@ -89,7 +89,7 @@ A quantitative evaluation was conducted by treating known drought events as a bi
 
 In this context, the metrics of Recall and Precision evaluate two distinct and critical aspects of model performance. Recall measures the model's ability to correctly identify actual drought events. Thus, high Recall is crucial for a warning system, as it means fewer droughts are missed. Conversely, Precision measures the reliability of the model's drought alarms as it indicates that when the model predicts a drought, it is likely to be correct. In practice, scoring high in Precision directly reduces false alarms and associated costs.
 
-The F1-score is particularly informative in highly imbalanced datasets such as this one where drought events form a small fraction of the total. Additionally, accuracy can be misleading in this context, since a model that always predicts “no drought” could achieve high accuracy simply due to class imbalance. Hence, F1-score is the most appropriate performance metric for this application.
+The F1-score is particularly informative in highly imbalanced datasets such as this one where drought events form a small fraction of the total. Additionally, accuracy can be misleading in this context, since a model that always predicts ``no drought" could achieve high accuracy simply due to class imbalance. Hence, F1-score is the most appropriate performance metric for this application.
 
 The following observations can be made from the results:
 

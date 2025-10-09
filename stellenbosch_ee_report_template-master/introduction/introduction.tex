@@ -41,7 +41,6 @@ Indices designed for a single disciplinary perspective (meteorological, hydrolog
 
 \subsection{Towards integrated drought monitoring in South Africa}
 
-% TODO: should I use "we" here?
 Conventional drought indices each capture a particular physical or ecological dimension of drought. Namely, the SPI for meteorological, SDI for hydrological, and NDVI for agricultural or ecological stress. Relying on any single index therefore provides an incomplete view. Often times these indices contradict each other and show substantial noise requiring an industry experts to diligently analyse them, ultimately leading to false positives and negatives for different users and complicates decision-making when policymakers require a consistent, interpretable drought declaration~\cite{NCEI_2024}.
 
 A composite indicator aims to combine the output of different, well-established indices to gain a more holistic assessment of drought exposure and its impacts. The benefits include improved detection of drought impacts, more robust signals through redundancy across inputs, and clearer communication to stakeholders who require an integrated risk of drought. Composite models such as the U.S. Drought Monitor and the European Combined Drought Indicator demonstrate how convergent evidence can be used to perform weekly or monthly monitoring. It should be noted that composite approaches are not plug-and-play; they require careful design choices and are sensitive to input quality~\cite{usdm,cdi,some_comp_indicator}.
@@ -68,26 +67,18 @@ Together, these objectives define the scope of the study and provide clear crite
 
 \section{Summary Of Work}
 
-\paragraph{TODO: NOT FINISHED}
+This project develops and evaluates a probabilistic framework for drought monitoring in South Africa using a DNBC. The model integrates three complementary drought indicators, that being the SPI, SDI and NDVI, to construct a composite drought indicator that encapsulates meteorological, hydrological, and agricultural dimensions of drought within a unified, probabilistic structure.
 
-\begin{itemize}
-    \item Here we tell the reader what was achieved. The idea is for the marker to see what was done here and the rest of the report is proof of this. 
-    \item Not sure how this is different from the problem Statement, but okay.
-    \item Maybe go into more detail
-\end{itemize}
+The study spans the period 1981–2019 in the Western Cape and relies exclusively on open-source datasets. Substantial effort was spent on acquisition, cleaning, and preprocessing the of the data to ensure quality. The SPI and SDI were derived directly from these datasets, while NDVI was incorporated as a satellite-based measure of vegetation stress.
+
+The DNBC was designed with discrete latent variables representing drought states and observed nodes corresponding to the input indices. Parameter estimation was performed using the Expectation–Maximisation (EM) algorithm in conjunction with Junction Tree (JT) inference for efficient computation of marginal and joint probabilities. Model selection was guided by the Akaike Information Criterion (AIC), Bayesian Information Criterion (BIC), and the maximised log-likelihood.
+
+Model performance was assessed both qualitatively and quantitatively. Temporal plots revealed that the DNBC effectively identified major historical drought events in South Africa. Although the model exhibited short-term oscillations and false alarms, its predictive accuracy was found to be comparable to, and in some aspects superior to, the individual drought indices by achieving the highest F1-score among all other indices. This indicates that the model successfully integrates the input drought indices to capture complex drought dynamics that no single index can.
 
 \section{Scope}
+While the ultimate goal of drought monitoring is to capture each dimension of drought, including the socio-economic aspect, this project deliberately restricts its scope to the meteorological, hydrological, and agricultural domains. The exclusion is primarily due to the considerable complexity involved in quantifying socio-economic indicators in the South African context. For existing methods of quantifying this dimension of drought, the limited availability of reliable, open-access data makes it near impossible. 
 
-\paragraph{TODO: NOT FINISHED}
+Similarly, the project relies on openly available precipitation data obtained from the University of Cape Town (UCT) rather than proprietary datasets from the South African Weather Service (SAWS). While the coverage of this dataset makes it well-suited for this project's purpose, its validity is uncertain when compared to the official SAWS records.
 
-\begin{itemize}
-    \item This section is for what you didnt do.
-    \item The idea is to show the reader that you considered the problem properly
-    \item Mention this is a positive light: I didn't do this because of x and x, but rather did this
-\end{itemize}
+Finally, it will also be noted that, fundamentally, the DNBC itself has several naive assumptions which will be discussed later. Although these assumptions are naive, the purpose of this study is to evaluate the effectiveness of this framework as a drought monitoring tool in the South African context.
 
-\section{Roadmap}
-
-\paragraph{TODO: NOT FINISHED}
-
-Simply explain what you did in each chapter

@@ -4,6 +4,7 @@
 \chapter{Methods}
 \label{chap:methods}
 \section{Data Acquisition}
+\label{sec:data_acquisition}
 The development of a composite drought indicator requires careful selection of input variables that capture the different aspects of drought. Three indices were selected: the Standardised Precipitation Index (SPI) to represent meteorological drought, the Streamflow Drought Index (SDI) to represent hydrological drought, and the Normalised Difference Vegetation Index (NDVI) as a proxy for agricultural drought. These indices were chosen based on their widespread use in literature and the availability of data. Data scarcity is a challenge in South Africa, as openly accessible, long and consistent drought-related datasets are limited. Consequently, the choice of indices attempts to strike a balance between theory and pragmatic constraints~\cite{za_drought_review,za_drought_review2,dnbc_drought_first,dnbc_drought_second}.
 
 Fix only the last sentence, leave everyhting else as is
@@ -18,8 +19,6 @@ To obtain the NDVI, the NOAA Climate Data Record (CDR) of AVHRR Normalised Diffe
 It is important to note that the overlapping period of the available data, and thus the scope for the model output spans from 1981 to 2019.
 
 \subsection{Preprocessing}
-
-
 To prepare the indices for model input, several preprocessing steps were performed:  
 \begin{enumerate}
     \item \textbf{Time Period Alignment:} All datasets were resampled or aggregated to a common monthly resolution.  
@@ -55,27 +54,46 @@ where $\rho_{\text{NIR}}$ and $\rho_{\text{RED}}$ are the surface reflectances i
 
 \subsection{Discretisation of Indices}
 The SPI, SDI, and NDVI are all continuous. However, the proposed model requires discrete inputs. Accordingly, each index was discretised into categorical bins based on thresholds widely used in literature. For example, SPI values are often classified into categories such as “extremely dry,” “moderately dry,” and “normal.” This discretisation not only aids in model implementation but it also motivates interpretability. Table~\ref{tbl:discretisation} below illustrates the bins used:
-
 \begin{table}[h]
     \centering
     \caption{Discretisation thresholds for drought indices.}
-        \begin{tabular}{lccc}
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \begin{tabular}{lcc}
             \toprule
-            \textbf{Category} & \textbf{SPI / SDI} & \textbf{NDVI Anomaly} & \textbf{Interpretation} \\
+            \textbf{Category} & \textbf{SPI / SDI}  \\
             \midrule
-            Severe Drought    & $\leq -1.5$        & $\leq -1.5$          & Extreme vegetation/hydrological stress \\
-            Moderate Drought  & $-1.5 < x \leq -0.5$ & $-1.5 < x \leq -0.5$ & Sustained but moderate deficit \\
-            Normal            & $-0.5 < x < 0.5$  & $-0.5 < x < 0.5$     & Near-average conditions \\
-            Moderate Wet      & $0.5 \leq x < 1.5$ & $0.5 \leq x < 1.5$   & Above-average moisture/greenness \\
-            Severe Wet        & $\geq 1.5$        & $\geq 1.5$           & Flooding risk or excessive rainfall \\
+            Severe Drought    & $\leq -1.5$        \\
+            Moderate Drought  & $-1.5 < x \leq -0.5$ \\
+            Normal            & $-0.5 < x < 0.5$  \\
+            Moderate Wet      & $0.5 \leq x < 1.5$ \\
+            Severe Wet        & $\geq 1.5$        \\
             \bottomrule
         \end{tabular}
+    \end{minipage}%
+    \hfill
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \begin{tabular}{lcc}
+            \toprule
+            \textbf{Category} & \textbf{NDVI} \\
+            \midrule
+            Bare soil / water    & $-1 < x <  0.1$   \\
+            Sparse vegetation  & $0.1 \leq x < 0.2 $\\
+            Moderate vegetation            & $0.2 < x < 0.4$    \\
+            Dense vegetation      & $0.4 \leq x < 0.6$ \\
+            High density vegetation        & $ 0.6 \leq x < 1 $          \\
+            \bottomrule
+        \end{tabular}
+    \end{minipage}
     \label{tbl:discretisation}
 \end{table}
-TODO: This table is likely to change...
+
 
 \section{Model Development}
+\label{sec:model_development}
 \subsection{Model Design}
+\label{sec:model_design}
 
 \subsubsection{Defining the Random Variables}
 
@@ -128,8 +146,8 @@ Figure~\ref{fig:dnbc-diagram} below displays the model diagram for a DNBC for $T
 \begin{figure}[!h]
     \centering
     \includegraphics[width=\linewidth]{dnbc-diagram.png}
-    \caption[TODO]{
-The Dynamic Naïve Bayes Classifier (DNBC) can be represented as a Bayesian network unfolding over time. At each time step $t$, a latent drought state $S_t$ is modelled as a discrete random variable that governs the latent structure, while the observed input variables $\vec{A}_t = \{A_t^{(1)}, A_t^{(2)}, \dots, A_t^{(N)}\}$ are each solely dependent on $S_t$}
+    \caption[DNBC Model Diagram]{
+The Dynamic Naive Bayes Classifier (DNBC) can be represented as a Bayesian network unfolding over time. At each time step $t$, a latent drought state $S_t$ is modelled as a discrete random variable that governs the latent structure, while the observed input variables $\vec{A}_t = \{A_t^{(1)}, A_t^{(2)}, \dots, A_t^{(N)}\}$ are each solely dependent on $S_t$}
     \label{fig:dnbc-diagram}
 \end{figure}
 
@@ -273,14 +291,14 @@ Figure~\ref{fig:jt_diagram} illustrates the JT structure associated with the DNB
 \begin{figure}[H]
     \centering
     \includegraphics[width=\linewidth]{jt-diagram.png}
-    \caption{Junction Tree representation of the DNBC. Each cluster groups together latent state variables and observed attributes, with sepsets defined along the edges. Messages are propagated through the tree to perform exact inference.}
+    \caption[Junction Tree Diagram]{Junction Tree representation of the DNBC. Each cluster groups together latent state variables and observed attributes, with sepsets defined along the edges. Messages are propagated through the tree to perform exact inference.}
     \label{fig:jt_diagram}
 \end{figure}
 
 It is useful to note the factorisation of the observed attribute RVs at Equation~\ref{eqn:attribute_rv_factorisation}. The cluster potentials are summarised in Table~\ref{tbl:cluster_potentials}.
 \begin{table}[!h]
     \mytable
-    \caption{Cluster potentials for the DNBC. Each potential corresponds either to a state transition or to a state-attribute relationship.}
+    \caption[Cluster Potentials Of Junction Tree]{Cluster potentials for the DNBC. Each potential corresponds either to a state transition or to a state-attribute relationship.}
     \begin{aligned}[c]
         &- \\
         \psi_2(S_1, S_2) &= p(S_2 \mid S_1) \\
@@ -364,6 +382,7 @@ It is worth emphasising the parallel between the JT messages and the forward–b
 In summary, the JT formulation highlights the structural perspective, while forward–backward and Baum–Welch remain the traditional algorithms in the literature. Both views are mathematically equivalent and lead to the same computations.
 
 \subsection{Parameter Estimation}
+\label{sec:param_estimation}
 Parameter estimation for the DNBC is carried out using the Expectation–Maximization (EM) algorithm~\cite{moon_tk}.  
 We distinguish between the hidden variables, observed data, and model parameters as follows:
 
@@ -517,6 +536,7 @@ Although the derivation via the forward algorithm is given for clarity, it has b
 Create a final draft for this:
 
 \section{Model Implementation}
+\label{sec:model_implementation}
 
 \subsection{Programming Environment \& Tools}
 All aspects of the DNBC model were implemented in \texttt{C++}, primarily chosen for its computational efficiency and the availability of the \texttt{emdw} library. This library provides robust functionality for probabilistic graphical models. The \texttt{C++} implementation handled the construction of factors, junction tree message passing, parameter estimation, model selection, and extraction of posterior outputs.  
@@ -530,10 +550,9 @@ At a high level, the process consisted of:
 \begin{figure}[!h]
     \centering
     \includegraphics[width=\linewidth]{pipeline-diagram.png}
-    \caption[Data pipeline for DNBC inputs]{Data pipeline from raw climate and vegetation data to discretised indices used as DNBC inputs. The pipeline consists of five stages: data collection, preprocessing, index calculation, discretisation, and input formatting.}
+    \caption[Data Pipeline For DNBC Inputs]{Data pipeline from raw climate and vegetation data to discretised indices used as DNBC inputs. The pipeline consists of five stages: data collection, preprocessing, index calculation, discretisation, and input formatting.}
     \label{fig:pipeline-diagram}
 \end{figure}
-
 
 \begin{enumerate}
     \item \textbf{Data Collection:} Acquiring raw climate and vegetation data.
@@ -559,7 +578,7 @@ The \texttt{runEM} function performed parameter estimation using the EM algorith
     \item Parameter update step (M-step).
     \item Likelihood calculation and convergence check using the relative tolerance criterion:
     \[
-        \frac{|\ell(\Theta)^{\text{new}} - \ell(\Theta)^{\text{old}}|}{\ell(\Theta)^{\text{old}}} < \epsilon
+        \frac{|\ell(\Theta)^{\text{new}} - \ell(\Theta)^{\text{old}}|}{\ell(\Theta)^{\text{old}}} < \varepsilon
     \]
         where the maximum number of iterations was capped at 100, whilst the threshold value was chosen to be $\epsilon = 10^{-4}$.
 \end{enumerate}
