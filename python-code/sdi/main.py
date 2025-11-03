@@ -12,6 +12,10 @@ import sys
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import pandas as pd
+import pandas as pd
+import numpy as np
+from scipy import stats
+import matplotlib.pyplot as plt
 
 
 def save_dataframe(df: pd.DataFrame, csv_path: str, debug=False):
@@ -511,37 +515,6 @@ def average_data(daily_data_dir: str):
     print(f"Monthly averages saved to: {save_path}")
 
 
-def calc_sdi(df, k=3):
-    """
-    Calculate cumulative Streamflow Drought Index (SDI) for given time scale k (months).
-
-    Parameters:
-        df (pd.DataFrame): must have columns ['YEAR','MONTH','FLOW_RATE']
-        k (int): time scale in months (e.g. 3, 6, 12)
-
-    Returns:
-        pd.DataFrame with added 'SDI_k' column
-    """
-
-    # Sort chronologically
-    df = df.sort_values(by=["YEAR", "MONTH"]).reset_index(drop=True)
-
-    # Compute cumulative volume over k months
-    df[f"V_{k}"] = df["FLOW_RATE"].rolling(window=k, min_periods=k).sum()
-
-    # Compute mean and std for available cumulative volumes
-    mean_Vk = df[f"V_{k}"].mean(skipna=True)
-    std_Vk = df[f"V_{k}"].std(skipna=True)
-
-    # Standardize
-    df[f"SDI"] = (df[f"V_{k}"] - mean_Vk) / std_Vk
-
-    # rename
-    df.rename(columns={"YEAR": "year", "MONTH": "month"}, inplace=True)
-
-    return df
-
-
 def apply_filters(df: pd.DataFrame, filters: list):
     """
     Apply multiple boolean conditions to filter a DataFrame.
@@ -632,9 +605,9 @@ def messing_around():
 
 
 def get_stations_by_study_area(area_coords):
-
     # First Extract All Station Meta Data Into One Big List
     station_meta = []
+
     meta_dir = "./data/station_data/river/"
     all_entries = os.listdir(meta_dir)
     json_files = [elem for elem in all_entries if elem[-5:] == ".json"]
@@ -690,6 +663,10 @@ def plot_stations_by_codes(codes):
 
     df = pd.DataFrame(target_meta_data)
 
+    # Save study area stations
+    df.to_csv("./data/study_area/stations.csv")
+    print("Saved study area stations...")
+
     # Must convert to numeric columns...
     df["lat"] = pd.to_numeric(df["lat"])
     df["lon"] = pd.to_numeric(df["lon"])
@@ -726,6 +703,147 @@ def avg_data_many_stations(station_codes):
         for file in csv_files:
             if station == file.split(".")[0].strip():
                 average_data(os.path.join(daily_dir, file))
+
+
+def calc_ssi(df, k=12, distribution="lognorm"):
+    """
+    Calculate Standardised Streamflow Index (SSI) for given time scale k (months).
+
+    SSI is calculated by:
+    1. Aggregating streamflow over k-month periods
+    2. Fitting a probability distribution (log-normal or gamma) to each calendar month
+    3. Transforming to standard normal distribution
+
+    Parameters:
+        df (pd.DataFrame): must have columns ['YEAR','MONTH','FLOW_RATE']
+        k (int): time scale in months (e.g. 1, 3, 6, 12)
+        distribution (str): 'lognorm' (default) or 'gamma'
+
+    Returns:
+        pd.DataFrame with added 'SSI_{k}' column
+    """
+    # Sort chronologically
+    df = df.sort_values(by=["YEAR", "MONTH"]).reset_index(drop=True)
+
+    # Aggregate streamflow over k months
+    # For k=1, this is just the monthly flow; for k>1, it's the mean over k months
+    df[f"Q_{k}"] = df["FLOW_RATE"].rolling(window=k, min_periods=k).mean()
+
+    # Initialize SSI column ( TODO CHANGE THIS SSI)
+    df[f"SDI"] = np.nan
+
+    # For each calendar month, fit distribution and calculate SSI
+    for month in range(1, 13):
+        month_mask = df["MONTH"] == month
+        month_data = df.loc[month_mask, f"Q_{k}"].dropna()
+
+        if len(month_data) < 3:  # Need minimum data points for fitting
+            continue
+
+        # Filter out zeros/negatives for log-normal
+        if distribution == "lognorm":
+            month_data = month_data[month_data > 0]
+            if len(month_data) < 3:
+                continue
+
+        try:
+            # Fit the distribution to historical data for this calendar month
+            if distribution == "lognorm":
+                shape, loc, scale = stats.lognorm.fit(month_data, floc=0)
+                # Calculate cumulative probability for each value
+                cdf_vals = stats.lognorm.cdf(
+                    df.loc[month_mask, f"Q_{k}"], shape, loc, scale
+                )
+            elif distribution == "gamma":
+                shape, loc, scale = stats.gamma.fit(month_data, floc=0)
+                cdf_vals = stats.gamma.cdf(
+                    df.loc[month_mask, f"Q_{k}"], shape, loc, scale
+                )
+            else:
+                raise ValueError("Distribution must be 'lognorm' or 'gamma'")
+
+            # Transform to standard normal distribution (SSI)
+            # Clip CDF values to avoid infinities at extremes (0 and 1)
+            cdf_vals = np.clip(cdf_vals, 0.0001, 0.9999)
+            ssi_vals = stats.norm.ppf(cdf_vals)
+
+            df.loc[month_mask, f"SDI"] = ssi_vals
+
+        except Exception as e:
+            print(f"Warning: Could not fit distribution for month {month}: {e}")
+            continue
+
+    # Rename columns
+    df.rename(columns={"YEAR": "year", "MONTH": "month"}, inplace=True)
+
+    return df
+
+
+def calc_sdi(df, k=12, distribution="lognorm"):
+    """
+    Calculate Streamflow Drought Index (SDI) using probability distribution fitting.
+
+    Parameters:
+        df (pd.DataFrame): must have columns ['YEAR','MONTH','FLOW_RATE']
+        k (int): time scale in months (e.g. 3, 6, 12)
+        distribution (str): 'lognorm' or 'gamma'
+    Returns:
+        pd.DataFrame with added 'SDI_{k}' column
+    """
+    # Sort chronologically
+    df = df.sort_values(by=["YEAR", "MONTH"]).reset_index(drop=True)
+
+    # Compute cumulative volume over k months
+    df[f"V_{k}"] = df["FLOW_RATE"].rolling(window=k, min_periods=k).sum()
+
+    # Initialize SDI column
+    df[f"SDI"] = np.nan
+
+    # For each calendar month, fit distribution and calculate SDI
+    for month in range(1, 13):
+        month_mask = df["MONTH"] == month
+        month_data = df.loc[month_mask, f"V_{k}"].dropna()
+
+        if len(month_data) < 3:  # Need minimum data points
+            continue
+
+        # Filter out zeros/negatives for log-normal
+        if distribution == "lognorm":
+            month_data = month_data[month_data > 0]
+            if len(month_data) < 3:
+                continue
+
+        try:
+            # Fit the distribution
+            if distribution == "lognorm":
+                shape, loc, scale = stats.lognorm.fit(month_data, floc=0)
+                # Calculate cumulative probability
+                cdf_vals = stats.lognorm.cdf(
+                    df.loc[month_mask, f"V_{k}"], shape, loc, scale
+                )
+            elif distribution == "gamma":
+                shape, loc, scale = stats.gamma.fit(month_data, floc=0)
+                cdf_vals = stats.gamma.cdf(
+                    df.loc[month_mask, f"V_{k}"], shape, loc, scale
+                )
+            else:
+                raise ValueError("Distribution must be 'lognorm' or 'gamma'")
+
+            # Transform to standard normal (SDI)
+            # Clip CDF values to avoid infinities at extremes
+            cdf_vals = np.clip(cdf_vals, 0.0001, 0.9999)
+            sdi_vals = stats.norm.ppf(cdf_vals)
+
+            df.loc[month_mask, f"SDI"] = sdi_vals
+
+        except Exception as e:
+            print(f"Warning: Could not fit distribution for month {month}: {e}")
+            continue
+
+    # Rename columns
+    df.rename(columns={"YEAR": "year", "MONTH": "month"}, inplace=True)
+
+    return df
 
 
 def calc_sdi_many_stations(station_codes):
@@ -843,6 +961,36 @@ def validate_sdi(df: pd.DataFrame) -> None:
     print("=" * 35)
 
 
+def plot_sdi_timeseries(df):
+    """
+    Plot SDI time series data with proper datetime handling.
+
+    Parameters:
+    df (DataFrame): DataFrame with 'year', 'month', and 'SDI' columns
+    """
+    # Create a datetime column for proper time series plotting
+    df["date"] = pd.to_datetime(df["year"].astype(str) + "-" + df["month"].astype(str))
+
+    # Create the plot
+    plt.figure(figsize=(12, 6))
+    plt.plot(df["date"], df["SDI"], linewidth=1)
+
+    # Add labels and title
+    plt.xlabel("Year")
+    plt.ylabel("SDI")
+    plt.title("SDI Time Series (1955-2025)")
+    plt.grid(True, alpha=0.3)
+
+    # Rotate x-axis labels for better readability
+    plt.xticks(rotation=45)
+
+    # Adjust layout to prevent label cutoff
+    plt.tight_layout()
+
+    # Show the plot
+    plt.show()
+
+
 def main():
 
     study_area_coords = {
@@ -854,14 +1002,19 @@ def main():
 
     station_codes = get_stations_by_study_area(study_area_coords)
 
-    # return
-    # plot_stations_by_codes(station_codes)
+    plot_stations_by_codes(station_codes)
+    print(len(station_codes))
+    return
+    # station_codes = ["G1H008", "G1H013", "G1H020"]
+
+    #     return
     # scrape_many_stations(station_codes)
 
     # avg_data_many_stations(station_codes)
 
     final = calc_sdi_many_stations(station_codes)
     validate_sdi(final)
+    # plot_sdi_timeseries(final)
 
     # Save Data
     save_dataframe(final, "./data/sdi_data/sdi.csv", debug=True)

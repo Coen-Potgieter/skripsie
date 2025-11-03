@@ -1,4 +1,5 @@
 import pandas as pd
+import matplotlib.pyplot as plt
 import numpy as np
 from pandas.core.api import DataFrame
 from scipy.stats import gamma, norm
@@ -199,15 +200,15 @@ def get_stations_by_area(area_coords):
         & (meta_df["lat"] <= area_coords["lat_max"])
         & (meta_df["lon"] >= area_coords["lon_min"])
         & (meta_df["lon"] <= area_coords["lon_max"])
-        & (meta_df["Source"] == "DWS")
-        & (meta_df["NameUsed"] != "VREDENDALD")
+        # & (meta_df["Source"] == "DWS")
+        # & (meta_df["NameUsed"] != "VREDENDALD")
     ]
 
     # Some manual filtering cause fuck this data set...
-    fix_dict = {
-        "WELLINGTOND": "WELLINGTON",
-    }
-    filtered_df["NameUsed"] = filtered_df["NameUsed"].replace(fix_dict)
+    # fix_dict = {
+    #     "WELLINGTOND": "WELLINGTON",
+    # }
+    # filtered_df["NameUsed"] = filtered_df["NameUsed"].replace(fix_dict)
     return filtered_df
 
 
@@ -316,6 +317,47 @@ def validate_spi(df: pd.DataFrame) -> None:
     print("=" * 35)
 
 
+def plot_spi_timeseries(df):
+    """
+    Plot SPI time series data with proper datetime handling.
+
+    Parameters:
+    df (DataFrame): DataFrame with 'year', 'month', and 'SPI' columns
+    """
+    # Create a datetime column for proper time series plotting
+    df["date"] = pd.to_datetime(df["year"].astype(str) + "-" + df["month"].astype(str))
+
+    # Create the plot
+    plt.figure(figsize=(14, 7))
+    plt.plot(df["date"], df["SPI"], linewidth=1, color="steelblue")
+
+    # Add labels and title
+    plt.xlabel("Year", fontsize=12)
+    plt.ylabel("SPI", fontsize=12)
+    plt.title(
+        "Standardized Precipitation Index (SPI) Time Series (1979-2019)",
+        fontsize=14,
+        fontweight="bold",
+    )
+    plt.grid(True, alpha=0.3)
+
+    # Add a horizontal line at y=0 for reference
+    plt.axhline(y=0, color="red", linestyle="-", alpha=0.5, linewidth=0.8)
+
+    # Rotate x-axis labels for better readability
+    plt.xticks(rotation=45)
+
+    # Adjust layout to prevent label cutoff
+    plt.tight_layout()
+
+    # Show the plot
+    plt.show()
+
+    # Print some info about the data
+    print(f"Data range: {df['date'].min()} to {df['date'].max()}")
+    print(f"NaN values: {df['SPI'].isna().sum()} (these are not plotted)")
+
+
 def main():
     # ==================== Pick CSV File & Import ====================
     bad2_csv = "./data/10dayrain.csv"
@@ -343,28 +385,35 @@ def main():
     }
 
     stations_in_study_area = get_stations_by_area(study_area_coords)
-    # plot_stations(stations_in_study_area, "study_area.html")
+    print(len(stations_in_study_area))
+    plot_stations(stations_in_study_area, "study_area.html")
 
+    # # Save Study Area
+    # stations_in_study_area.to_csv("./data/processed/study_area.csv")
+    # print("Saved study area stations...")
     # return
 
-    # ==================== Exrtact by Station Names ====================
+    # ==================== Exrtact SPI by Station Names ====================
     # Need a list of station names here
-    station_names = stations_in_study_area["NameUsed"].to_list()
-    avg_spi_df = avg_spi_by_station_names(station_names, k=3)
+    # station_names = stations_in_study_area["NameUsed"].to_list()
+    # avg_spi_df = avg_spi_by_station_names(station_names, k=12)
+    # # plot_spi_timeseries(avg_spi_df)
 
-    validate_spi(avg_spi_df)
-
-    save_dataframe(avg_spi_df, "./data/processed/spi.csv", debug=True)
-
-    return
+    # validate_spi(avg_spi_df)
+    # save_dataframe(avg_spi_df, "./data/processed/spi.csv", debug=True)
+    # return
 
     # ==================== Playground ====================
     # messing_around(pd.read_csv(station_meta_data_csv))
     # return
 
     # ==================== Plot Stations ====================
-    station_meta_data = pd.read_csv(station_meta_data_csv)
-    plot_stations(station_meta_data, "all_stations.html")
+    # All stations
+    # station_meta_data = pd.read_csv(station_meta_data_csv)
+    # plot_stations(station_meta_data, "all_stations.html")
+
+    # study area stations
+    plot_stations(stations_in_study_area, "study_area.html")
     return
 
     # ==================== Filter to a single station ====================

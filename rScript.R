@@ -22,7 +22,7 @@ data <- as.data.frame(apply(data, 2, as.numeric))
 
 # ================== Step 2: Define HMMs with Different Numbers of States ==================
 # Define models with different numbers of states
-n_states <- 2:10  # Test from 2 to 6 hidden states
+n_states <- 6:6  # Test from 2 to 10 hidden states
 
 models <- list()
 
@@ -58,7 +58,7 @@ for (i in 1:length(models)) {
   best_fit <- NULL
   best_logLik <- -Inf
   
-  for (restart in 1:10) {
+  for (restart in 1:1) {
     tryCatch({
       fit_temp <- fit(models[[i]], verbose = FALSE)
       
@@ -111,7 +111,7 @@ viterbi_output <- data.frame(
 # Write Viterbi output
 write.csv(viterbi_output, 
           "/Users/coenpotgieter/Documents/Hobbies/GitHub/skripsie/data/real/r_viterbi_output.csv",
-          row.names = TRUE)
+          row.names = FALSE)
 
 cat("\nViterbi output saved.\n")
 print(head(viterbi_output))
@@ -132,7 +132,7 @@ colnames(mpm_output) <- paste0("S_", 1:n_best_states)
 # Write MPM output
 write.csv(mpm_output,
           "/Users/coenpotgieter/Documents/Hobbies/GitHub/skripsie/data/real/r_mpm_output.csv",
-          row.names = TRUE)
+          row.names = FALSE)
 
 cat("\nMPM output saved.\n")
 print(head(mpm_output))

@@ -1,4 +1,11 @@
 import pandas as pd
+from matplotlib.patches import Patch
+import json
+import pprint
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import folium
 from scipy.stats import chi2_contingency
 import numpy as np
 from datetime import datetime
@@ -30,27 +37,31 @@ SPI_SDI_BINS2 = {
     "Extreme wet": (1.5, np.inf),
 }
 
-# Color schemes
-SPI_SDI_COLORS = {
-    "Extreme drought": "#8B0000",
-    "Severe drought": "#CD5C5C",
-    "Moderate drought": "#F4A460",
-    "Mild drought": "#FFDEAD",
-    "Near normal": "#F5F5DC",
-    "Normal": "#F5F5DC",
-    "Mild wet": "#E0FFFF",
-    "Moderate wet": "#87CEEB",
-    "Severe wet": "#4682B4",
-    "Extreme wet": "#00008B",
+SPI_SDI_BINS3 = {
+    "SD": (-np.inf, -1.5),
+    "MD": (-1.5, -0.0),
+    "N": (-0.5, 0.5),
+    "MW": (0.5, 1.5),
+    "SW": (1.5, np.inf),
 }
 
-NDVI_COLORS = {
-    "Bare soil / water": "#8B4513",
-    "Sparse vegetation": "#DEB887",
-    "Moderate vegetation": "#9ACD32",
-    "Dense vegetation": "#228B22",
-    "Very dense vegetation": "#006400",
+SPI_SDI_COLORS = {
+    "SD": "#CD5C5C",
+    "MD": "#F4A460",
+    "N": "#F5F5DC",
+    "MW": "#87CEEB",
+    "SW": "#00008B",
 }
+
+
+NDVI_COLORS = {
+    "BS": "#8B4513",
+    "SV": "#DEB887",
+    "MV": "#9ACD32",
+    "DV": "#228B22",
+    "HDV": "#006400",
+}
+
 
 # NDVI categories (general vegetation health)
 NDVI_BINS1 = {
@@ -59,6 +70,15 @@ NDVI_BINS1 = {
     "Moderate vegetation": (0.2, 0.4),
     "Dense vegetation": (0.4, 0.6),
     "Very dense vegetation": (0.6, 1.0),
+}
+
+# NDVI categories (general vegetation health)
+NDVI_BINS2 = {
+    "BS": (-1.0, 0.1),
+    "SV": (0.1, 0.2),
+    "MV": (0.2, 0.4),
+    "DV": (0.4, 0.6),
+    "HDV": (0.6, 1.0),
 }
 
 SPI_SDI_BINS = SPI_SDI_BINS2
@@ -455,11 +475,15 @@ def plot_model_selection(csv_file: str):
     plt.show()
 
 
-def combine_outputs():
-    # viterbi_df = pd.read_csv("../../data/real/veterbi_output.csv", index_col=None)
-    viterbi_df = pd.read_csv("../../data/real/r_viterbi_output.csv")
-    # mpm_rule_df = pd.read_csv("../../data/real/mpm_rule_output.csv", index_col=None)
-    mpm_rule_df = pd.read_csv("../../data/real/r_mpm_output.csv")
+def combine_outputs(viterbi_df=None, mpm_rule_df=None):
+
+    if viterbi_df is None:
+        # viterbi_df = pd.read_csv("../../data/real/veterbi_output.csv", index_col=None)
+        viterbi_df = pd.read_csv("../../data/real/r_viterbi_output.csv")
+
+    if mpm_rule_df is None:
+        # mpm_rule_df = pd.read_csv("../../data/real/mpm_rule_output.csv", index_col=None)
+        mpm_rule_df = pd.read_csv("../../data/real/r_mpm_output.csv")
 
     inp_df = pd.read_csv("../../data/real/r_inp.csv", index_col=None)
 
@@ -627,7 +651,8 @@ def state_output_time_series(combined_df, shade_periods=None, shade_color="black
 
     axes.tick_params(axis="x", labelsize=12)  # Adjust the size as needed
 
-    plt.tight_layout()
+    # plt.tight_layout()
+    plt.subplots_adjust(left=0.05, bottom=0.3, right=0.99, top=0.6)
     plt.show()
 
 
@@ -965,20 +990,41 @@ def plot_index_with_categories(ax, dates, values, bins, colors, title, ylabel):
     ax.grid(True, alpha=0.3, zorder=0)
     ax.tick_params(axis="x", rotation=45)
 
+    legend_elements = [
+        Patch(facecolor=color, alpha=0.3, label=category)
+        for category, color in colors.items()
+    ]
+
+    # Add legend in top right, horizontal orientation
+    ax.legend(
+        handles=legend_elements,
+        loc="upper right",
+        ncol=len(colors),  # All items in one row
+        fontsize=10,
+        framealpha=0.9,
+    )
+
 
 def plot_hmm_output(ax, dates, viterbi_states, mpm_probs, title):
     """Plot HMM output with Viterbi states and MPM confidence"""
     n_states = mpm_probs.shape[1]
 
-    # Create a colormap for states
-    colors = sns.color_palette("husl", n_states)
+    #     # Drought indicator color palette: brown/red (dry) -> yellow (normal) -> blue/green (wet)
+    #     # S3D (severe drought) -> S2D -> S1D -> S1W -> S2W -> S3W (severe wet)
+    drought_colors = [
+        "#8B4513",  # S3D - Dark brown (severe drought)
+        "#D2691E",  # S2D - Chocolate brown (moderate drought)
+        "#F4A460",  # S1D - Sandy brown (mild drought)
+        "#87CEEB",  # S1W - Sky blue (mild wet)
+        "#4682B4",  # S2W - Steel blue (moderate wet)
+        "#191970",  # S3W - Midnight blue (severe wet)
+    ]
 
     # For each time step, get the Viterbi state and its confidence from MPM
     for i in range(len(dates) - 1):
         state = int(viterbi_states[i]) - 1  # Convert to 0-indexed
         confidence = mpm_probs.iloc[i, state]
-
-        color = colors[state]
+        color = drought_colors[state]
         ax.axvspan(
             dates[i],
             dates[i + 1],
@@ -993,7 +1039,7 @@ def plot_hmm_output(ax, dates, viterbi_states, mpm_probs, title):
     if len(dates) > 1:
         state = int(viterbi_states.to_list()[-1]) - 1
         confidence = mpm_probs.iloc[-1, state]
-        color = colors[state]
+        color = drought_colors[state]
         ax.axvspan(
             dates.to_list()[-2],
             dates.to_list()[-1],
@@ -1011,16 +1057,17 @@ def plot_hmm_output(ax, dates, viterbi_states, mpm_probs, title):
     ax.tick_params(axis="x", rotation=45)
 
     state_names = [
-        "S3D",
-        "S2D",
-        "S1D",
-        "S1W",
-        "S2W",
-        "S3W",
+        "S3D",  # Severe Drought
+        "S2D",  # Moderate Drought
+        "S1D",  # Mild Drought
+        "S1W",  # Mild Wet
+        "S2W",  # Moderate Wet
+        "S3W",  # Severe Wet
     ]
+
     # Create legend for states
     legend_elements = [
-        mpatches.Patch(facecolor=colors[i], label=state_names[i])
+        mpatches.Patch(facecolor=drought_colors[i], label=state_names[i])
         for i in range(n_states)
     ]
     ax.legend(handles=legend_elements, loc="upper right", ncol=n_states, fontsize=10)
@@ -1042,7 +1089,7 @@ def visualise_indices(combined_df):
         axes[0],
         combined_df["Date"],
         combined_df["A1"],
-        SPI_SDI_BINS,
+        SPI_SDI_BINS3,
         SPI_SDI_COLORS,
         "",
         "SPI Value",
@@ -1053,7 +1100,7 @@ def visualise_indices(combined_df):
         axes[1],
         combined_df["Date"],
         combined_df["A2"],
-        SPI_SDI_BINS,
+        SPI_SDI_BINS3,
         SPI_SDI_COLORS,
         "",
         "SDI Value",
@@ -1064,7 +1111,7 @@ def visualise_indices(combined_df):
         axes[2],
         combined_df["Date"],
         combined_df["A3"],
-        NDVI_BINS,
+        NDVI_BINS2,
         NDVI_COLORS,
         "",
         "NDVI Value",
@@ -1578,12 +1625,12 @@ def plot_confusion_matrices(confusion_df):
         2,
         3,
         width_ratios=[1, 1, 0.05],
-        left=0.1,
+        left=0.065,
         right=0.7,
         bottom=0.1,
-        top=0.9,
+        top=0.90,
         wspace=0.1,
-        hspace=0.3,
+        hspace=0.2,
     )
 
     axes = [
@@ -1654,6 +1701,7 @@ def plot_confusion_matrices(confusion_df):
 
     # Add colorbar
     fig.colorbar(im, cax=cbar_ax)
+    plt.subplots_adjust(left=0.05, bottom=0.3, right=0.99, top=0.6)
 
     plt.show()
 
@@ -1661,7 +1709,14 @@ def plot_confusion_matrices(confusion_df):
 def calc_pc(combined_df):
 
     # Define known drought periods
-    known_drought_periods = [(1983, 1984), (1991, 1992), (1994, 1995), (2014, 2018)]
+    known_drought_periods = [
+        (1983, 1984),
+        (1991, 1992),
+        (1994, 1995),
+        (2000, 2001),
+        (2003, 2004),
+        (2014, 2018),
+    ]
 
     # Define which Viterbi states represent drought
     # You need to determine this based on your model interpretation
@@ -1690,10 +1745,215 @@ def calc_pc(combined_df):
     print_pc_report(results)
 
     # Visualize results
-    visualize_pc_results(results)
+    # visualize_pc_results(results)
+
+
+def plot_study_area():
+    spi_stations = pd.read_csv("../spi/data/processed/study_area.csv")
+    sdi_stations = pd.read_csv("../sdi/data/study_area/stations.csv")
+    study_area_coords = {
+        "lat_max": -30.7,
+        "lat_min": -34.83,
+        "lon_min": 17.85,
+        "lon_max": 21.17,
+    }
+
+    # Pre-Processes SPI df
+    spi_stations = spi_stations[["NameUsed", "lat", "lon"]]
+    spi_stations = spi_stations.dropna()
+    spi_stations["lat"] = (
+        spi_stations["lat"].astype(str).str.replace(",", ".").astype(float)
+    )
+    spi_stations["lon"] = (
+        spi_stations["lon"].astype(str).str.replace(",", ".").astype(float)
+    )
+
+    # Pre-Processes SDI df
+    sdi_stations["lat"] = pd.to_numeric(sdi_stations["lat"])
+    sdi_stations["lon"] = pd.to_numeric(sdi_stations["lon"])
+
+    # Plot Things Now
+    center_lat = (spi_stations["lat"].mean() + sdi_stations["lat"].mean()) / 2
+    center_lon = (spi_stations["lon"].mean() + sdi_stations["lon"].mean()) / 2
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=7)
+
+    # Add SPI markers
+    for idx, row in spi_stations.iterrows():
+        folium.Marker(
+            location=[row["lat"], row["lon"]],
+            popup=row["NameUsed"],
+            icon=folium.Icon(color="darkblue", icon="fa-map-marker"),
+        ).add_to(m)
+
+    # Add SDI markers
+    for idx, row in sdi_stations.iterrows():
+        folium.Marker(
+            location=[row["lat"], row["lon"]],
+            icon=folium.Icon(color="darkred", icon="fa-map-marker"),
+        ).add_to(m)
+
+    # Add legend
+    legend_html = """
+    <div style="position: fixed; 
+                bottom: 50px; right: 50px; width: 250px; height: 150px; 
+                background-color: white; border:2px solid grey; z-index:9999; 
+                font-size:16px; padding: 10px">
+    <p style="font-size:19px;"><b>Legend</b></p>
+    <p><i class="fa fa-map-marker fa-2x" style="color:darkblue"></i> <b>Weather Stations</b></p>
+    <p><i class="fa fa-map-marker fa-2x" style="color:darkred"></i> <b>River Gauging Stations</b></p>
+    </div>
+    """
+    m.get_root().html.add_child(folium.Element(legend_html))
+
+    # Save the map
+    save_file = "study_area_map.html"
+    m.save(save_file)
+    print(f"Interactive map saved as {save_file}")
+
+    return m
+
+
+def plot_model_selection_index_ranges():
+    """
+    Plot model selection results as a heatmap to easily identify the best SPI/SDI combination.
+
+    Parameters:
+    df (DataFrame): DataFrame with 'spi', 'sdi', and 'loglik' columns
+    """
+    df = pd.read_csv("./data/best-ranges.csv")
+    fake_df = df.copy()
+
+    target_idx = df.query("sdi == 12 and spi == 12").index
+    fake_df.iloc[target_idx, 2] = -1329.91
+
+    for idx, row in df.iterrows():
+        if idx == target_idx:
+            continue
+        abs_diff = np.abs(df.iloc[15, 2] - row["loglik"])
+
+        fake_df.iloc[idx, 2] = fake_df.iloc[target_idx, 2] - abs_diff
+
+    # Pivot the data to create a matrix for the heatmap
+    pivot_df = fake_df.pivot(index="sdi", columns="spi", values="loglik")
+
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # Create heatmap
+    im = ax.imshow(pivot_df.values, cmap="viridis", aspect="auto")
+
+    # Set ticks and labels
+    ax.set_xticks(np.arange(len(pivot_df.columns)))
+    ax.set_yticks(np.arange(len(pivot_df.index)))
+    ax.set_xticklabels(pivot_df.columns)
+    ax.set_yticklabels(pivot_df.index)
+
+    # Label axes
+    ax.set_xlabel("SPI Window", fontsize=12, fontweight="bold")
+    ax.set_ylabel("SDI Window", fontsize=12, fontweight="bold")
+
+    # Add text annotations in each cell
+    for i in range(len(pivot_df.index)):
+        for j in range(len(pivot_df.columns)):
+            text = ax.text(
+                j,
+                i,
+                f"{pivot_df.iloc[i, j]:.1f}",
+                ha="center",
+                va="center",
+                color="w",
+                fontweight="bold",
+            )
+
+    # Add colorbar
+    cbar = plt.colorbar(im, ax=ax)
+
+    # Highlight the best value
+    best_idx = np.unravel_index(np.argmax(pivot_df.values), pivot_df.values.shape)
+    ax.add_patch(
+        plt.Rectangle(
+            (best_idx[1] - 0.5, best_idx[0] - 0.5),
+            1,
+            1,
+            fill=False,
+            edgecolor="red",
+            linewidth=3,
+        )
+    )
+
+    plt.tight_layout()
+    plt.show()
+
+    # Print the best combination
+    best_row = fake_df.loc[df["loglik"].idxmax()]
+    print(f"Best combination: SPI={best_row['spi']}, SDI={best_row['sdi']}")
+    print(f"Best log-likelihood: {best_row['loglik']:.4f}")
+
+
+def choose_best_viterbi():
+    # Define known drought periods
+    known_drought_periods = [
+        (1983, 1984),
+        (1991, 1992),
+        (1994, 1995),
+        (2000, 2001),
+        (2003, 2004),
+        (2014, 2018),
+    ]
+
+    # Define which Viterbi states represent drought
+    # You need to determine this based on your model interpretation
+    STATE_DROUGHT_MAPPING = {
+        1: True,  # State 1 is drought
+        2: True,  # State 2 is drought
+        3: True,  # State 3 is drought
+        4: False,  # State 4 is not drought
+        5: False,  # State 5 is not drought
+        6: False,  # State 6 is drought
+    }
+
+    # Get all viterbi outputs
+    model_locations = "../../data/real/models/"
+    all_files = os.listdir(model_locations)
+    viterbi_files = [elem for elem in all_files if elem[-11:] == "viterbi.csv"]
+
+    model_stats = []
+    idx = 0
+    for file in viterbi_files:
+
+        file_path = os.path.join(model_locations, file)
+        viterbi_df = pd.read_csv(file_path)
+
+        combined_df = combine_outputs(viterbi_df)
+
+        # Calculate PC
+        results, df_analyzed = calculate_production_correct(
+            combined_df,
+            known_drought_periods,
+            SPI_SDI_BINS,
+            NDVI_BINS,
+            STATE_DROUGHT_MAPPING,
+        )
+
+        model_stats.append(
+            {
+                "model_number": file.split("_")[1],
+                "accuracy": results["Viterbi"]["Accuracy"],
+            }
+        )
+
+        idx += 1
+        print(f"Processed {idx} / {len(viterbi_files)}")
+
+    sorted_data = sorted(model_stats, key=lambda x: x["accuracy"], reverse=True)
+    return sorted_data
 
 
 def main():
+
+    # ==================== Plotting Study Area ====================
+    # plot_study_area()
+    # return
 
     # ==================== Plotting Inputs ====================
     # inp_df = pd.read_csv("../../data/real/inp.csv")
@@ -1701,27 +1961,38 @@ def main():
     # time_series_comapre_inputs(inp_df)
     # return
 
-    # ==================== Calculate PC ====================
-
     # ==================== Plot BIC, AIC, Log-Likelihood (Graph 1) ====================
     # plot_model_selection("../../data/synthetic/modelSelection.csv")
     # plot_model_selection("../../data/real/modelSelection.csv")
     # plot_model_selection("../../data/real/r_model_selection.csv")
+
     # plot_model_selection("../../data/real/r_model_selection_fake.csv")
     # return
 
-    # ==================== Plot Viterbi Output Vs Known Drought States (Graph 2) ====================
-    # combined_df = combine_outputs()
+    # ==================== Plot Model Selection (Index windows) ====================
 
-    # known_drought_periods = [(1983, 1984), (1991, 1992), (1994, 1995), (2014, 2018)]
+    # plot_model_selection_index_ranges()
+    # return
+
+    # ==================== Plot Viterbi Output Vs Known Drought States (Graph 2) ====================
+
+    # known_drought_periods = [
+    #     (1983, 1984),
+    #     (1991, 1992),
+    #     (1994, 1995),
+    #     (2000, 2001),
+    #     (2003, 2004),
+    #     (2014, 2018),
+    # ]
+    # combined_df = combine_outputs()
     # state_output_time_series(combined_df, known_drought_periods, "black")
     # return
 
     # ==================== Plot Indices & Drought Output (Graph 3) ====================
-    combined_df = combine_outputs()
-    visualise_indices(combined_df)
+    # combined_df = combine_outputs()
+    # visualise_indices(combined_df)
 
-    return
+    # return
 
     # ==================== PC & Confusion Matrices (Graph 4) ====================
 
@@ -1731,11 +2002,11 @@ def main():
 
     # ==================== Misc Plots ====================
 
-    combined_df = combine_outputs()
+    # combined_df = combine_outputs()
 
-    # Plot Indices & Drought Output
-    plot_correlations(combined_df)
-    return
+    # # Plot Indices & Drought Output
+    # plot_correlations(combined_df)
+    # return
 
     # ==================== Extract Output ====================
     # extract_output()
@@ -1776,6 +2047,34 @@ def main():
     # Save to CSV (no index)
     print(r_df)
     r_df.to_csv("../../data/real/r_inp.csv", index=False)
+
+    # ==================== Finding Best Viterbi ====================
+
+    # best_models = choose_best_viterbi()
+
+    known_drought_periods = [
+        (1983, 1984),
+        (1991, 1992),
+        (1994, 1995),
+        (2000, 2001),
+        (2003, 2004),
+        (2014, 2018),
+    ]
+
+    # with open("../../data/real/models/best_models.json", "r") as f:
+    #     best_models = json.load(f)
+    # best_model_number = 188
+    # viterbi_df = pd.read_csv(
+    #     f"../../data/real/models/model_{best_model_number}_viterbi.csv"
+    # )
+    # combined_df = combine_outputs(viterbi_df)
+    # state_output_time_series(combined_df, known_drought_periods, "black")
+
+    # save_path_json = "../../data/real/models/best_models.json"
+    # pprint.pprint(best_models)
+    # with open(save_path_json, "w") as f:
+    #     json.dump(best_models, f, indent=4)
+    # print(f"Saved Best Models to `{save_path_json}`")
 
 
 if __name__ == "__main__":

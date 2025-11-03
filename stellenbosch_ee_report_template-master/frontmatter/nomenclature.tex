@@ -11,7 +11,6 @@
     % Fundamental Dimensions & Indices
     $T$ & Total number of time steps \\
     $t$ & A single time step index \\
-    $N$ & Total number of input variables \\
     $n$ & A single input variable index \\
 
     % Core Random Variables
@@ -19,19 +18,22 @@
     $A_t^{(n)}$ & Observed value of the $n$-th input variable at time $t$ \\
 
     % Model Parameters
-    $\Theta$ & The set of all model parameters \\
-    $\pi_i$ & Initial state probability: $p(S_1 = i)$ \\
+    $\pi_i$ & Prior probability of the first latent drought random variable: $p(S_1 = i)$ \\
+    $\vec{\theta}_1$ & Set of all initial state probabilities \\
     $a_{i,j}$ & Transition probability from latent state $i$ to $j$: $p(S_t = j \mid S_{t-1} = i)$ \\
+    $\vec{\theta}_2$ & Set of all transition probabilities \\
     $b_i^{(n)}(j)$ & Emission probability: $p(A_t^{(n)} = j \mid S_t = i)$ \\
+    $\vec{\theta}_3$ & Set of all emission probabilities \\
+    $\Theta$ & The complete set of all model parameters \\
 
     % Cardinalities
     $m$ & Number of possible latent drought states (cardinality of $S_t$) \\
     $C_n$ & Number of discrete values for the $n$-th input variable $A_t^{(n)}$ \\
 
     % Sets & Collections
-    $\vec{A}_t$ & Set of all input variables at time $t$: $\{A_t^{(1)}, \dots, A_t^{(N)}\}$ \\
-    $A_{1:T}$ & Set of all input variables across all time steps: $\{\vec{A}_1, \dots, \vec{A}_T\}$ \\
-    $\vec{S}_{1:T}$ & Set of all latent state variables across all time steps: $\{S_1, \dots, S_T\}$ \\
+    $\vec{A}_t$ & Set of all input variables at time $t$: $\{A_t^{(1)}, A_t^{(3)}, A_t^{(3)}\}$ \\
+    $\vec{A}_{1:T}$ & Sequence of all input variables across all time steps: $(\vec{A}_1, \dots, \vec{A}_T)$ \\
+    $\vec{S}_{1:T}$ & Sequence of all latent state variables across all time steps: $(S_1, \dots, S_T)$ \\
     $\mathcal{H}$ & The set of all latent states in the DNBC \\
     $\mathcal{D}$ & The set of all observed data in the DNBC \\
 
@@ -40,12 +42,11 @@
     $L(\Theta)$ & The maximised log-likelihood of the model \\
 
     % Junction Tree Algorithm
-    $\psi_i(\vec{X})$ & Cluster potential of cluster $i$ over variables $\vec{X}$ in the junction tree \\
-    $\delta_{i \rightarrow j}(\vec{S})$ & Message from cluster $i$ to $j$ over separator set $\vec{S}$ in the junction tree \\
+    $\psi_i(\vec{X})$ & Cluster potential of cluster $i$ over set of random variables $\vec{X}$ in the clique tree \\
+    $\delta_{i \rightarrow j}(\vec{S})$ & Message from cluster $i$ to $j$ over separator set of random variables $\vec{S}$ in the clique tree \\
 
     % General Mathematical Notation
     $p(X)$ & Probability mass function of the discrete random variable $X$ \\
-    $\varepsilon$ & A small positive number (tolerance/threshold) \\
 \end{tabularx}
 \endgroup
 
@@ -56,18 +57,23 @@
 \begingroup
 \renewcommand{\arraystretch}{1.2}
 \begin{tabular}{@{}p{2.5cm} l}
-    DNBC    & Dynamic Naive Bayes Classifier \\
-    HMM    & Hidden Markov Model \\
-    JT    & Junction Tree \\
-    SPI    & Standard Precipitation Index \\
-    SDI    & Streamflow Drought Index \\
-    NDVI    & Normalized Difference Vegetation Index \\
-    EM      & Expectation–Maximisation \\
-    AIC & Akaike Information Criterion \\
-    BIC & Bayesian Information Criterion \\
+    PGM & Probabilistic graphical model \\
+    RV & Random variable \\
+    EM      & Expectation–maximisation \\
+    MPM & Maximum posterior marginal  \\
+    DNBC    & Dynamic naive Bayes classifier \\
+    HMM    & Hidden Markov model \\
+    JT    & Junction tree \\
+    AIC & Akaike information criterion \\
+    BIC & Bayesian information criterion \\
+    SPI    & Standard precipitation index \\
+    SDI    & Streamflow drought index \\
+    NDVI    & Normalised difference vegetation index \\
     DWS & Department of Water and Sanitation \\
     SAWS & South African Weather Service \\
-    RV & Random Variable \\
-    MPM & Maximum Posterior Marginal  \\
+    NOAA & National Oceanic and Atmospheric Administration \\
+    UCT & University of Cape Town  \\
+
+
 \end{tabular}
 \endgroup
