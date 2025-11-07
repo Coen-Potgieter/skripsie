@@ -22,7 +22,7 @@ data <- as.data.frame(apply(data, 2, as.numeric))
 
 # ================== Step 2: Define HMMs with Different Numbers of States ==================
 # Define models with different numbers of states
-n_states <- 6:6  # Test from 2 to 10 hidden states
+n_states <- 2:10  # Test from 2 to 10 hidden states
 
 models <- list()
 
