@@ -1,4 +1,5 @@
 *.DS_Store
+stellenbosch_ee_report_template-master/
 
 **/data/*
 !**/data/.gitkeep
